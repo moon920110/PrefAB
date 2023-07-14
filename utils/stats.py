@@ -4,14 +4,14 @@ from dataloader.again_reader import AgainReader
 
 
 def calc_correlation_per_player(data):
-    out = '[output]arousal'
+    out = 'arousal_delta'
 
     players = data['[control]player_id'].unique()
 
     corr_dict = {}
     for player in players:
         player_data = data[data['[control]player_id'] == player]
-        player_data.loc[:, 'arousal_delta'] = player_data['[output]arousal'].diff()
+        player_data.loc[:, out] = player_data['[output]arousal'].diff()
         numerics = player_data.select_dtypes(include='number')
         corr = numerics.corr()[out]
         corr_dict[player] = corr
@@ -20,10 +20,9 @@ def calc_correlation_per_player(data):
 
 
 def calc_correlation(data):
-    out = '[output]arousal'
+    out = 'arousal_delta'
 
-    data.loc[:, 'arousal_delta'] = data['[output]arousal'].diff()
-    print(data)
+    data.loc[:, out] = data['[output]arousal'].diff()
     numerics = data.select_dtypes(include='number')
     corr = numerics.corr()[out]
 
@@ -34,7 +33,8 @@ if __name__ == "__main__":
     game = 'Heist!'
     print(f'read data {game}')
     again_reader = AgainReader()
-    data = again_reader.game_info_by_name(game)
+    # data = again_reader.game_info_by_name(game)
+    data = again_reader.game_info_by_genre('Shooter')
     print(f'len data: {len(data)}')
     feature_names = again_reader.available_feature_names_by_game(game)
     print(f'available feature names: {feature_names}')
@@ -53,4 +53,5 @@ if __name__ == "__main__":
     corr_dict_df['std'] = std
     corr_dict_df['total'] = total_corr
 
+    # corr_dict_df.T.dropna(axis=1, how='all').to_csv(f'../data/{game}_correlation.csv')
     corr_dict_df.T.to_csv(f'../data/{game}_correlation.csv')
