@@ -3,9 +3,10 @@ import pandas as pd
 
 
 class AgainReader:
-    def __init__(self, data_path='/home/jovyan/supermoon/AGAIN'):
+    def __init__(self, data_path='/data/AGAIN'):
         data_path = data_path
 
+        print(f'data from {os.path.join(data_path, "clean_data", "clean_data.csv")}')
         self.again = pd.read_csv(os.path.join(data_path, 'clean_data', 'clean_data.csv'), encoding='utf-8', low_memory=False)
 
     def game_info_by_genre(self, genre):

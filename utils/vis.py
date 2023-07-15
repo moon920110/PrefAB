@@ -1,7 +1,5 @@
 import matplotlib.pyplot as plt
 
-from dataloader.again_reader import AgainReader
-
 
 def plot_ordinal_arousal(data, title):
     games = data['[control]game'].unique()
@@ -46,11 +44,3 @@ def plot_arousal(data, title):
 
 def plot_arousal_with_video(data, title):
     pass
-
-
-if __name__ == '__main__':
-    again_reader = AgainReader()
-    title = 'Shooter'
-    data = again_reader.game_info_by_genre(title)
-    # find player id
-    plot_arousal_with_video(data, title)
