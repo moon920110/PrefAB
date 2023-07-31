@@ -6,12 +6,12 @@ from dataloader.again_reader import AgainReader
 def calc_correlation_per_player(data):
     out = 'arousal_delta'
 
-    players = data['[control]player_id'].unique()
+    players = data['player_id'].unique()
 
     corr_dict = {}
     for player in players:
-        player_data = data[data['[control]player_id'] == player]
-        player_data.loc[:, out] = player_data['[output]arousal'].diff()
+        player_data = data[data['player_id'] == player]
+        player_data.loc[:, out] = player_data['arousal'].diff()
         numerics = player_data.select_dtypes(include='number')
         corr = numerics.corr()[out]
         corr_dict[player] = corr
@@ -22,7 +22,7 @@ def calc_correlation_per_player(data):
 def calc_correlation(data):
     out = 'arousal_delta'
 
-    data.loc[:, out] = data['[output]arousal'].diff()
+    data.loc[:, out] = data['arousal'].diff()
     numerics = data.select_dtypes(include='number')
     corr = numerics.corr()[out]
 
