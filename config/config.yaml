@@ -1,0 +1,63 @@
+data:
+  path: /home/jovyan/data/AGAIN
+  vision:
+    video: videos_mp4
+    frame: frame_data
+  sequential: false
+  img_mean: [ 0.485, 0.456, 0.406 ]
+  img_std: [ 0.229, 0.224, 0.225 ]
+
+game_name:
+  TinyCars: tiny
+  Solid: solid
+  ApexSpeed: apex
+  Heist!: fps
+  Shootout: gallery
+  TopDown: topdown
+  Run'N'Gun: gun
+  Pirates!: platform
+  Endless: endless
+
+train:
+  exp: prefab-0.1
+  log_dir: log/
+  optimizer: adam
+  lr: 0.0001
+  epoch: 10000
+  genre: Shooter  # All, Shooter, Platformer, Racing
+  batch_size: 128
+  train_ratio: 0.8
+  val_ratio: 0.1
+  num_workers: 16
+  distributed:
+    multi_gpu: true
+    world_size: 1
+    rank: 0
+    dist_url: tcp://localhost:11111
+    backend: nccl
+
+debug: true
+
+game_numbering:
+  All:
+    TinyCars: 0
+    Solid: 1
+    ApexSpeed: 2
+    Heist!: 3
+    Shootout: 4
+    TopDown: 5
+    Run'N'Gun: 6
+    Pirates!: 7
+    Endless: 8
+  Shooter:
+    Heist!: 0
+    Shootout: 1
+    TopDown: 2
+  Platformer:
+    Run'N'Gun: 0
+    Pirates!: 1
+    Endless: 2
+  Racing:
+    TinyCars: 0
+    Solid: 1
+    ApexSpeed: 2
