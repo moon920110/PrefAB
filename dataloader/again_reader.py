@@ -5,11 +5,12 @@ from tqdm import tqdm
 
 
 class AgainReader:
-    def __init__(self, config=None):
+    def __init__(self, config=None, logger=None):
         self.data_path = config['data']['path']
         self.config = config
+        self.logger = logger
 
-        print(f'data from {os.path.join(self.data_path, "clean_data", "clean_data.csv")}')
+        self.logger.debug(f'data from {os.path.join(self.data_path, "clean_data", "clean_data.csv")}')
         # read csv without row index
         self.again = pd.read_csv(os.path.join(self.data_path, 'clean_data', 'clean_data.csv'),
                                  encoding='utf-8',
@@ -83,4 +84,4 @@ class AgainReader:
 
 if __name__ == "__main__":
     again_reader = AgainReader()
-    print(again_reader.load_ranknet_train_eval())
+    # logging.debug(again_reader.load_ranknet_train_eval())

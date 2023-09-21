@@ -1,9 +1,11 @@
 import os
 import time
+import logging
 
 import torch
 import horovod.torch as hvd
 import torch.nn as nn
+import torch.optim.lr_scheduler as lr_scheduler
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader, random_split
@@ -60,22 +62,23 @@ class Trainer:
                                   shuffle=(train_sampler is None),
                                   pin_memory=True)
 
-        print(f'build model gpu: {rank}')
+        logging.debug(f'build model gpu: {rank}')
         model = AutoEncoder()
         model.to(self.device)
         criterion = nn.MSELoss().to(self.device)
 
         optimizer = torch.optim.Adam(model.parameters(), lr=self.config['train']['lr'])
+        scheduler = lr_scheduler.StepLR(optimizer, step_size=self.config['train']['schedule'], gamma=0.1)
+        compiled_model = torch.compile(model)
         if self.config['train']['distributed']['multi_gpu']:
             optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters())
-            hvd.broadcast_parameters(model.state_dict(), root_rank=0)
+            hvd.broadcast_parameters(compiled_model.state_dict(), root_rank=0)
 
-        model.train()
         for epc in range(self.config['train']['epoch']):
             losses = 0
             if self.config['train']['distributed']['multi_gpu']:
                 train_sampler.set_epoch(epc)
-                print(f'[gpu {rank}]train sampler set epoch {epc}')
+                logging.debug(f'[gpu {rank}]train sampler set epoch {epc}')
 
             cnt = 0
             out_for_saving = None
@@ -83,7 +86,7 @@ class Trainer:
                 img_data = img_data.to(self.device)
 
                 optimizer.zero_grad()
-                _, output = model(img_data)
+                e, output = compiled_model(img_data)
                 loss = criterion(output, img_data)
                 loss.backward()
                 optimizer.step()
@@ -94,12 +97,12 @@ class Trainer:
                 cnt += 1
                 out_for_saving = output[-1]
 
-            print(f'[gpu:{rank}]epoch {epc} avg. loss {losses / cnt:.4f}')
+            logging.debug(f'[gpu:{rank}]epoch {epc} avg. loss {losses / cnt:.4f}')
 
             # write output image to tensorboard
             if writer:
                 writer.add_images(f'output_{rank} epc_{epc}', out_for_saving, epc, dataformats='CHW')
-
+            scheduler.step()
 
             # with torch.no_grad():
             #     model.eval()
