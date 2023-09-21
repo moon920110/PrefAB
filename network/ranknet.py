@@ -1,7 +1,9 @@
+import math
 import torch
-import torch.nn as nn
+from torch import nn, Tensor
 from torch.nn.modules.transformer import TransformerEncoder, TransformerEncoderLayer
-import timm
+
+from network.autoencoder import AutoEncoder
 
 
 class MLPBase(nn.Module):
@@ -45,17 +47,60 @@ class MLPBase(nn.Module):
 
 
 class RankNet(nn.Module):
-    def __init__(self, net_structures, double_precision=False):
-        super(RankNet, self).__init__(net_structures, double_precision)
+    def __init__(self, config):
+        super(RankNet, self).__init__()
 
-        self.base_network = MLPBase(net_structures, double_precision)
+        f_dim = config['train']['f_dim']
+        d_model = config['train']['d_model']
+        self.autoencoder = AutoEncoder()
+        self.extractor = nn.Linear(f_dim, d_model)
+        # self.pos_embedding = nn.Embedding(100, d_model)
+        self.pos_encoder = PositionalEncoding(d_model)
+        encoder_layers = TransformerEncoderLayer(d_model=d_model, nhead=8)
+        self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers=2)
+        self.fc = nn.Linear(d_model, 1)
 
-    def forward(self, input1, input2):
-        x1 = self.base_network(input1)
-        x2 = self.base_network(input2)
-        return torch.sigmoid(x1 - x2)
+    def forward(self, img1, input1, img2, input2):
+        reshaped_img1 = img1.view(-1, *img1.shape[2:])  # batch, 4, c, h, w => batch * 4, c, h, w
+        reshaped_img2 = img2.view(-1, *img2.shape[2:])
+        e1, d1 = self.autoencoder(reshaped_img1)
+        e2, d2 = self.autoencoder(reshaped_img2)
+        e1 = e1.view(int(e1.shape[0]/4), 4, -1)
+        e2 = e2.view(int(e2.shape[0]/4), 4, -1)
 
-    def dump_param(self):
-        self.base_network.dump_param()
+        input1 = torch.cat((input1, e1), dim=2)
+        input1 = self.extractor(input1.view(-1, input1.shape[-1]))
+        input1 = input1.view(int(input1.shape[0]/4), 4, -1)
+        input2 = torch.cat((input2, e2), dim=2)
+        input2 = self.extractor(input2.view(-1, input2.shape[-1]))
+        input2 = input2.view(int(input2.shape[0]/4), 4, -1)
+
+        input1 = self.pos_encoder(input1)
+        input2 = self.pos_encoder(input2)
+
+        # input1 = self.pos_embedding(torch.arange(input1.size(2))).unsqueeze(0) + input1
+        # input2 = self.pos_embedding(torch.arange(input2.size(2))).unsqueeze(0) + input2
+        x1 = self.transformer_encoder(input1)
+        x2 = self.transformer_encoder(input2)
+        avg_pooled1 = torch.mean(x1, dim=1)
+        avg_pooled2 = torch.mean(x2, dim=1)
+        x1 = self.fc(avg_pooled1)
+        x2 = self.fc(avg_pooled2)
+        return torch.sigmoid(x1 - x2), d1, d2
 
 
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)  # 0::2 means 0, 2, 4, 6, ...
+        pe[:, 0, 1::2] = torch.cos(position * div_term)  # 1::2 means 1, 3, 5, 7, ...
+        self.register_buffer('pe', pe)  # register_buffer is not a parameter, but it is part of state_dict
+
+    def forward(self, x):
+        x = x + self.pe[:x.size(0)]
+        return self.dropout(x)
