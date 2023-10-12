@@ -13,14 +13,14 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     sh = logging.StreamHandler()
     sh.setFormatter(formatter)
     logger.addHandler(sh)
 
-    fh = logging.FileHandler('log.log')
+    fh = logging.FileHandler('log/log.log')
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 

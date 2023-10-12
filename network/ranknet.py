@@ -53,10 +53,16 @@ class RankNet(nn.Module):
         f_dim = config['train']['f_dim']
         d_model = config['train']['d_model']
         self.autoencoder = AutoEncoder()
-        self.extractor = nn.Linear(f_dim, d_model)
-        # self.pos_embedding = nn.Embedding(100, d_model)
+        self.extractor = nn.Sequential(
+            nn.Linear(f_dim, 8192),
+            nn.ReLU(),
+            nn.Linear(8192, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, d_model),
+            nn.ReLU(),
+        )
         self.pos_encoder = PositionalEncoding(d_model)
-        encoder_layers = TransformerEncoderLayer(d_model=d_model, nhead=8)
+        encoder_layers = TransformerEncoderLayer(d_model=d_model, nhead=4, batch_first=True)
         self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers=2)
         self.fc = nn.Linear(d_model, 1)
 
@@ -75,11 +81,13 @@ class RankNet(nn.Module):
         input2 = self.extractor(input2.view(-1, input2.shape[-1]))
         input2 = input2.view(int(input2.shape[0]/4), 4, -1)
 
+        # batch first to seqence first
+        # input1 = input1.transpose(0, 1)
+        # input2 = input2.transpose(0, 1)
+
         input1 = self.pos_encoder(input1)
         input2 = self.pos_encoder(input2)
 
-        # input1 = self.pos_embedding(torch.arange(input1.size(2))).unsqueeze(0) + input1
-        # input2 = self.pos_embedding(torch.arange(input2.size(2))).unsqueeze(0) + input2
         x1 = self.transformer_encoder(input1)
         x2 = self.transformer_encoder(input2)
         avg_pooled1 = torch.mean(x1, dim=1)

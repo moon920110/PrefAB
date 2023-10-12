@@ -30,9 +30,10 @@ train:
   train_ratio: 0.8
   val_ratio: 0.1
   num_workers: 16
-  f_dim: 25933
-  d_model: 8192
+  f_dim: 26506
+  d_model: 200
   schedule: 50
+  save_dir: log/model
   distributed:
     multi_gpu: true
     world_size: 1
