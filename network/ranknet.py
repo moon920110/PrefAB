@@ -1,6 +1,6 @@
 import math
 import torch
-from torch import nn, Tensor
+from torch import nn
 from torch.nn.modules.transformer import TransformerEncoder, TransformerEncoderLayer
 
 from network.autoencoder import AutoEncoder
@@ -61,8 +61,8 @@ class RankNet(nn.Module):
             nn.Linear(1024, d_model),
             nn.ReLU(),
         )
-        self.pos_encoder = PositionalEncoding(d_model)
-        encoder_layers = TransformerEncoderLayer(d_model=d_model, nhead=4, batch_first=True)
+        self.pos_encoder = PositionalEncoding(d_model, dropout=config['train']['dropout'])
+        encoder_layers = TransformerEncoderLayer(d_model=d_model, nhead=4, dropout=config['train']['dropout'], batch_first=True)
         self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers=2)
         self.fc = nn.Linear(d_model, 1)
 

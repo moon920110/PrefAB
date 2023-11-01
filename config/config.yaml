@@ -26,9 +26,10 @@ train:
   lr: 0.0001
   epoch: 1000
   genre: Shooter  # All, Shooter, Platformer, Racing
-  batch_size: 16  # 128
+  batch_size: 48  # 128
   train_ratio: 0.8
   val_ratio: 0.1
+  dropout: 0.5
   num_workers: 16
   f_dim: 26506
   d_model: 200
@@ -41,7 +42,7 @@ train:
     dist_url: tcp://localhost:11111
     backend: nccl
 
-debug: true
+debug: false
 
 game_numbering:
   All:

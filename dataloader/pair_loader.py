@@ -31,6 +31,8 @@ class PairLoader(Dataset):
             self.init_dataset()
 
     def init_sequence_dataset(self):
+        if self.config['debug']:
+            self.dataset = self.dataset[:20]
         for x, img_path in tqdm(self.dataset, desc=f'Preparing sequential dataset'):
             for game in x['game'].unique():
                 for player in x['player_id'].unique():
@@ -70,6 +72,16 @@ class PairLoader(Dataset):
 
     def __len__(self):
         return len(self.y)
+
+    def compute_sample_weight(self, indices):
+        tmp_y = np.array(self.y)[indices]
+        _, cnts = np.unique(tmp_y, return_counts=True)
+        class_sample_cnt = np.array(cnts)  # count of each label
+        weight = class_sample_cnt.max() / class_sample_cnt
+
+        sample_weight = np.array(weight[(tmp_y*2).astype(int)])
+
+        return sample_weight
 
     def __getitem__(self, idx):
         img_data = self.x_img_pairs[idx]  # images: (0:4) = comparison frames, (1:5) = main frames
