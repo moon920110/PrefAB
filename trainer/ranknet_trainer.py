@@ -12,10 +12,12 @@ import torch.optim.lr_scheduler as lr_scheduler
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader, random_split
+from sklearn.metrics import confusion_matrix, accuracy_score
 
 from dataloader.pair_loader import PairLoader
 from dataloader.distributedWeightedSampler import DistributedWeightedSampler
 from network.ranknet import RankNet
+from network.focalLoss import FocalLoss
 
 
 class RanknetTrainer:
@@ -54,7 +56,7 @@ class RanknetTrainer:
             val_sampler = DistributedWeightedSampler(self.val_dataset, num_replicas=hvd.size(), rank=rank)
             writer = SummaryWriter(
                 log_dir=os.path.join(self.config['train']['log_dir'],
-                                     time.strftime('%Y-%m-%d-%H-%M-%S')
+                                     f"{self.config['train']['exp']}_{time.strftime('%Y-%m-%d-%H-%M-%S')}"
                                      )
             ) if rank == 0 else None
         else:
@@ -81,8 +83,8 @@ class RanknetTrainer:
         self.logger.info(f'build model gpu: {rank}')
         model = RankNet(self.config)
         model.to(self.device)
-        ae_criterion = nn.MSELoss().to(self.device)
-        rank_criterion = nn.BCELoss().to(self.device)
+        ae_criterion = nn.L1Loss().to(self.device)
+        rank_criterion = FocalLoss().to(self.device)
 
         optimizer = torch.optim.Adam(model.parameters(), lr=self.config['train']['lr'])
         # compiled_model = torch.compile(model)
@@ -105,7 +107,7 @@ class RanknetTrainer:
                 feature1 = feature1.to(self.device)
                 img2 = img2.to(self.device)
                 feature2 = feature2.to(self.device)
-                label = label.unsqueeze(1).to(self.device)
+                label = label.to(self.device)
 
                 optimizer.zero_grad()
                 o, d1, d2 = model(img1, feature1, img2, feature2)
@@ -162,9 +164,8 @@ class RanknetTrainer:
                     writer.add_images(f'val/output_{rank} epc_{epc}', out_for_saving2, epc, dataformats='NCHW')
 
                     self.logger.info(f'[gpu:{rank}]epoch {epc} avg. val acc {accs / len(val_loader):.4f}')
-                    # add confusion matrix
                     cm = pd.DataFrame(cm, index=['dec', 'same', 'inc'], columns=['dec', 'same', 'inc'])
-                    plt.figure(figsize=(15, 15))
+                    plt.figure(figsize=(30, 30))
                     sns.heatmap(cm, annot=True, cmap='Blues')
                     writer.add_figure(f'val/confusion_matrix_{rank} epc_{epc}', plt.gcf())
 
@@ -179,18 +180,22 @@ class RanknetTrainer:
 
     def _metric(self, y_pred, y_true):
         # set all elements less than 1/3 to 0, greater than 2/3 to 1, otherwise 0.5 in y_pred
-        y_pred = torch.where(y_pred < 1/3, torch.zeros_like(y_pred), y_pred)
-        y_pred = torch.where(y_pred > 2/3, torch.ones_like(y_pred), y_pred)
-        y_pred = torch.where((y_pred >= 1/3) & (y_pred <= 2/3), torch.ones_like(y_pred) * 0.5, y_pred)
+        # y_pred = torch.where(y_pred < 1/3, torch.zeros_like(y_pred), y_pred)
+        # y_pred = torch.where(y_pred > 2/3, torch.ones_like(y_pred), y_pred)
+        # y_pred = torch.where((y_pred >= 1/3) & (y_pred <= 2/3), torch.ones_like(y_pred) * 0.5, y_pred)
 
-        acc = (y_pred == y_true).sum().item() / len(y_pred)
-        cm = self._confusion_matrix(y_true, y_pred)
+        # acc = (y_pred == y_true).sum().item() / len(y_pred)
+        # cm = self._confusion_matrix(y_true, y_pred)
+
+        acc = accuracy_score(y_true.cpu().detach().numpy(), y_pred.cpu().detach().numpy().argmax(axis=1))
+        cm = confusion_matrix(y_true.cpu().detach().numpy(), y_pred.cpu().detach().numpy().argmax(axis=1), labels=[0, 1, 2])
 
         return acc, cm
 
     def _confusion_matrix(self, y_true, y_pred):
-        result = np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]])
-        label = [0, 0.5, 1]
+        result = np.zeros((3, 3))
+        label = [0, 1, 2]
+
         for i, v in enumerate(label):
             v_idx = (y_true == v)
             p_v = y_pred[v_idx]
@@ -199,5 +204,5 @@ class RanknetTrainer:
                 continue
 
             for j, p in enumerate(label):
-                result[j, i] = (p_v == p).sum().item() / len(p_v)
+                result[j, i] = (p_v == p).sum()
         return result

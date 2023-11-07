@@ -1,7 +1,9 @@
 import math
 import torch
+import torch.nn.functional as F
 from torch import nn
 from torch.nn.modules.transformer import TransformerEncoder, TransformerEncoderLayer
+
 
 from network.autoencoder import AutoEncoder
 
@@ -64,7 +66,7 @@ class RankNet(nn.Module):
         self.pos_encoder = PositionalEncoding(d_model, dropout=config['train']['dropout'])
         encoder_layers = TransformerEncoderLayer(d_model=d_model, nhead=4, dropout=config['train']['dropout'], batch_first=True)
         self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers=2)
-        self.fc = nn.Linear(d_model, 1)
+        self.fc = nn.Linear(d_model, 3)
 
     def forward(self, img1, input1, img2, input2):
         reshaped_img1 = img1.view(-1, *img1.shape[2:])  # batch, 4, c, h, w => batch * 4, c, h, w
@@ -81,10 +83,6 @@ class RankNet(nn.Module):
         input2 = self.extractor(input2.view(-1, input2.shape[-1]))
         input2 = input2.view(int(input2.shape[0]/4), 4, -1)
 
-        # batch first to seqence first
-        # input1 = input1.transpose(0, 1)
-        # input2 = input2.transpose(0, 1)
-
         input1 = self.pos_encoder(input1)
         input2 = self.pos_encoder(input2)
 
@@ -94,7 +92,8 @@ class RankNet(nn.Module):
         avg_pooled2 = torch.mean(x2, dim=1)
         x1 = self.fc(avg_pooled1)
         x2 = self.fc(avg_pooled2)
-        return torch.sigmoid(x1 - x2), d1, d2
+        # return torch.sigmoid(x1 - x2), d1, d2
+        return F.log_softmax(x1 - x2, dim=-1), d1, d2
 
 
 class PositionalEncoding(nn.Module):

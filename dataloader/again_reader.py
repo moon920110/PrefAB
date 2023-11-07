@@ -27,8 +27,8 @@ class AgainReader:
 
         # get arousal diff by frame interval
         arousal_diff = again.groupby(['player_id', 'game'])['arousal'].diff()
-        # NaN and 0 to 0.5 negative to 0 positive to 1
-        pair_rank_label = arousal_diff.apply(lambda x: 0.5 if pd.isna(x) or x == 0 else 0 if x < 0 else 1)
+        # NaN and 0 to 1 negative to 0 positive to 2
+        pair_rank_label = arousal_diff.apply(lambda x: 1 if pd.isna(x) or x == 0 else 0 if x < 0 else 2)
 
         again['pair_rank_label'] = pair_rank_label
         again = again.drop(columns=['arousal'])

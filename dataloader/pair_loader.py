@@ -79,14 +79,14 @@ class PairLoader(Dataset):
         class_sample_cnt = np.array(cnts)  # count of each label
         weight = class_sample_cnt.max() / class_sample_cnt
 
-        sample_weight = np.array(weight[(tmp_y*2).astype(int)])
+        sample_weight = np.array(weight[tmp_y.astype(int)])
 
         return sample_weight
 
     def __getitem__(self, idx):
         img_data = self.x_img_pairs[idx]  # images: (0:4) = comparison frames, (1:5) = main frames
         meta = self.x_meta_pairs[idx]  # game log data
-        y = self.y[idx]  # 0, 0.5, 1
+        y = self.y[idx]  # 0, 0.5, 1 => 0, 1, 2
 
         img_path, time_indices, time_stamps = img_data
         if self.sequential:  # ranknet using sequential input
