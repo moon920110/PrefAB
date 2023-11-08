@@ -1,6 +1,7 @@
 import math
 import torch
 import torch.nn.functional as F
+import torch.nn.init as init
 from torch import nn
 from torch.nn.modules.transformer import TransformerEncoder, TransformerEncoderLayer
 
@@ -64,9 +65,28 @@ class RankNet(nn.Module):
             nn.ReLU(),
         )
         self.pos_encoder = PositionalEncoding(d_model, dropout=config['train']['dropout'])
-        encoder_layers = TransformerEncoderLayer(d_model=d_model, nhead=4, dropout=config['train']['dropout'], batch_first=True)
+        encoder_layers = TransformerEncoderLayer(d_model=d_model, nhead=8, dropout=config['train']['dropout'], batch_first=True)
         self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers=2)
         self.fc = nn.Linear(d_model, 3)
+
+        self._init_weights()
+
+    def _init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                if m is self.fc:
+                    init.xavier_normal_(m.weight)
+                else:
+                    init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    init.constant_(m.bias, 0.0)
+            elif isinstance(m, nn.Conv2d):
+                init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    init.constant_(m.bias, 0.0)
+            elif isinstance(m, nn.BatchNorm2d):
+                init.constant_(m.weight, 1.0)
+                init.constant_(m.bias, 0.0)
 
     def forward(self, img1, input1, img2, input2):
         reshaped_img1 = img1.view(-1, *img1.shape[2:])  # batch, 4, c, h, w => batch * 4, c, h, w
@@ -103,11 +123,14 @@ class PositionalEncoding(nn.Module):
 
         position = torch.arange(max_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-        pe = torch.zeros(max_len, 1, d_model)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)  # 0::2 means 0, 2, 4, 6, ...
-        pe[:, 0, 1::2] = torch.cos(position * div_term)  # 1::2 means 1, 3, 5, 7, ...
+        pe = torch.zeros(max_len, d_model)
+        pe[:, 0::2] = torch.sin(position * div_term)  # 0::2 means 0, 2, 4, 6, ...
+        pe[:, 1::2] = torch.cos(position * div_term)  # 1::2 means 1, 3, 5, 7, ...
+
+        pe = pe.unsqueeze(0)  # (1, max_len, d_model)
         self.register_buffer('pe', pe)  # register_buffer is not a parameter, but it is part of state_dict
 
     def forward(self, x):
-        x = x + self.pe[:x.size(0)]
+        # x is (batch, seq_len, d_model)
+        x = x + self.pe[:, :x.size(1), :]
         return self.dropout(x)

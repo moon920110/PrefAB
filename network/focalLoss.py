@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class FocalLoss(nn.Module):
@@ -11,7 +10,6 @@ class FocalLoss(nn.Module):
         self.reduction = reduction
 
     def forward(self, inputs, targets):
-        # log_prob = F.log_softmax(inputs, dim=-1)
         log_prob = inputs.gather(1, targets.unsqueeze(1)).squeeze(1)
         prob = torch.exp(log_prob)
         loss = -self.alpha * (1 - prob) ** self.gamma * log_prob

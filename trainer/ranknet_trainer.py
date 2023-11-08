@@ -146,7 +146,7 @@ class RanknetTrainer:
                     feature1 = feature1.to(self.device)
                     img2 = img2.to(self.device)
                     feature2 = feature2.to(self.device)
-                    label = label.unsqueeze(1).to(self.device)
+                    label = label.to(self.device)
 
                     o, d1, d2 = model(img1, feature1, img2, feature2)
 

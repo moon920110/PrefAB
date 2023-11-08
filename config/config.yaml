@@ -20,7 +20,7 @@ game_name:
   Endless: endless
 
 train:
-  exp: prefab-0.1
+  exp: FocalLoss_multiclass_dropout_none
   log_dir: log/
   optimizer: adam
   lr: 0.0001
@@ -29,7 +29,7 @@ train:
   batch_size: 48  # 128
   train_ratio: 0.8
   val_ratio: 0.1
-  dropout: 0.5
+  dropout: 0.1
   num_workers: 16
   f_dim: 26506
   d_model: 200
@@ -42,7 +42,7 @@ train:
     dist_url: tcp://localhost:11111
     backend: nccl
 
-debug: false
+debug: true
 
 game_numbering:
   All:

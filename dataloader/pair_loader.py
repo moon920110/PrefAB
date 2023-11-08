@@ -65,6 +65,7 @@ class PairLoader(Dataset):
                         row['game'] = self.config['game_numbering'][self.config['train']['genre']][game]
                         row = row.loc[self.numeric_columns]
                         row = row.drop(columns=['pair_rank_label']).astype(np.float32)
+                        # TODO: Add player related information
 
                         self.x_img_pairs.append(img_data)
                         self.x_meta_pairs.append(row)
