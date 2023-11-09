@@ -112,7 +112,6 @@ class RankNet(nn.Module):
         avg_pooled2 = torch.mean(x2, dim=1)
         x1 = self.fc(avg_pooled1)
         x2 = self.fc(avg_pooled2)
-        # return torch.sigmoid(x1 - x2), d1, d2
         return F.log_softmax(x1 - x2, dim=-1), d1, d2
 
 

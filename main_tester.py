@@ -1,3 +1,5 @@
+import os
+
 import logging
 import argparse
 import yaml
@@ -20,6 +22,8 @@ if __name__ == '__main__':
     sh.setFormatter(formatter)
     logger.addHandler(sh)
 
+    if not os.path.exists('log'):
+        os.makedirs('log')
     fh = logging.FileHandler('log/log.log')
     fh.setFormatter(formatter)
     logger.addHandler(fh)
