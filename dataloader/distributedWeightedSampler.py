@@ -17,3 +17,14 @@ class DistributedWeightedSampler(DistributedSampler, WeightedRandomSampler):
     def _get_weights(self, dataset):
         samples_weight = torch.from_numpy(dataset.dataset.compute_sample_weight(dataset.indices))
         return samples_weight
+
+
+class WeightedSampler(WeightedRandomSampler):
+    def __init__(self, dataset, replacement=True):
+        num_samples = len(dataset)
+        weights = self._get_weights(dataset)
+        super().__init__(weights, num_samples, replacement=replacement)
+
+    def _get_weights(self, dataset):
+        samples_weight = torch.from_numpy(dataset.dataset.compute_sample_weight(dataset.indices))
+        return samples_weight

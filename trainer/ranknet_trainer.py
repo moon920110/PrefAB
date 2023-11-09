@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader, random_split
 from sklearn.metrics import confusion_matrix, accuracy_score
 
 from dataloader.pair_loader import PairLoader
-from dataloader.distributedWeightedSampler import DistributedWeightedSampler
+from dataloader.distributedWeightedSampler import DistributedWeightedSampler, WeightedSampler
 from network.ranknet import RankNet
 from network.focalLoss import FocalLoss
 
@@ -34,7 +34,7 @@ class RanknetTrainer:
             [train_size, val_size, test_size]
         )
 
-        torch.set_float32_matmul_precision('high')
+        # torch.set_float32_matmul_precision('high')
         if config['train']['distributed']['multi_gpu']:
             hvd.init()
             if torch.cuda.is_available():
@@ -65,6 +65,8 @@ class RanknetTrainer:
                                      time.strftime('%Y-%m-%d-%H-%M-%S')
                                      )
             )
+            train_sampler = WeightedSampler(self.train_dataset)
+            val_sampler = WeightedSampler(self.val_dataset)
 
         # (batch, pair, sequence, channel, height, width)
         train_loader = DataLoader(self.train_dataset,
