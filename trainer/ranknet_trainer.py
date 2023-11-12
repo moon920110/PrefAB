@@ -62,7 +62,7 @@ class RanknetTrainer:
         else:
             writer = SummaryWriter(
                 log_dir=os.path.join(self.config['train']['log_dir'],
-                                     time.strftime('%Y-%m-%d-%H-%M-%S')
+                                     f"{self.config['train']['exp']}_{time.strftime('%Y-%m-%d-%H-%M-%S')}"
                                      )
             )
             train_sampler = WeightedSampler(self.train_dataset)
