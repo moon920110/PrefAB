@@ -95,6 +95,8 @@ class RanknetTrainer:
             hvd.broadcast_parameters(model.state_dict(), root_rank=0)
         scheduler = lr_scheduler.StepLR(optimizer, step_size=len(train_loader) * self.config['train']['schedule'], gamma=0.1)
 
+        best_acc = 0
+        prev_best = 0
         for epc in range(self.config['train']['epoch']):
             losses = 0
             d1, d2 = None, None
@@ -171,13 +173,18 @@ class RanknetTrainer:
                     sns.heatmap(cm, annot=True, cmap='Blues')
                     writer.add_figure(f'val/confusion_matrix_{rank} epc_{epc}', plt.gcf())
 
-            # model save
+                if accs / len(val_loader) > best_acc:
+                    prev_best = best_acc
+                    best_acc = accs / len(val_loader)
+
+            # model save if validation accuracy is the best
             if rank == 0:
-                torch.save(
-                    model.state_dict(),
-                    os.path.join(self.config['train']['save_dir'],
-                                 f'ranknet{self.config["train"]["exp"]}_{epc}.pth')
-                )
+                if prev_best < best_acc:
+                    torch.save(
+                        model.state_dict(),
+                        os.path.join(self.config['train']['save_dir'],
+                                     f'ranknet{self.config["train"]["exp"]}_{epc}.pth')
+                    )
         writer.close()
 
     def _metric(self, y_pred, y_true):
