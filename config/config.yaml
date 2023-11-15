@@ -20,7 +20,7 @@ game_name:
   Endless: endless
 
 train:
-  exp: FocalLoss_multiclass_dropout_none
+  exp: horovod_test
   log_dir: log/
   optimizer: adam
   lr: 0.0001
@@ -37,10 +37,12 @@ train:
   save_dir: log/model
   distributed:
     multi_gpu: true
+    num_gpus: 4
     world_size: 1
     rank: 0
     dist_url: tcp://localhost:11111
     backend: nccl
+    seed: 1125
 
 debug: true
 

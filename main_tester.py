@@ -3,9 +3,15 @@ import os
 import logging
 import argparse
 import yaml
+import horovod
 
 from trainer.ranknet_trainer import RanknetTrainer
 from utils.vis import *
+
+
+def train(config, logger):
+    trainer = RanknetTrainer(config=config, logger=logger)
+    trainer.train()
 
 
 if __name__ == '__main__':
@@ -31,5 +37,9 @@ if __name__ == '__main__':
     with open(args.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
-    trainer = RanknetTrainer(config=config, logger=logger)
-    trainer.train()
+    if config['train']['distributed']['multi_gpu']:
+        horovod.run(train,
+                    args=(config, logger),
+                    np=config['train']['distributed']['num_gpus'])
+    else:
+        train(config, logger)

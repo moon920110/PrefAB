@@ -39,6 +39,7 @@ class RanknetTrainer:
             hvd.init()
             if torch.cuda.is_available():
                 torch.cuda.set_device(hvd.local_rank())
+                torch.cuda.manual_seed(config['train']['distributed']['seed'])
                 self.device = torch.device(f'cuda', hvd.local_rank())
         else:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -82,6 +83,10 @@ class RanknetTrainer:
                                 shuffle=(val_sampler is None),
                                 pin_memory=True)
 
+        div = 4 if self.config['train']['distributed']['multi_gpu'] else 1
+        len_train_loader = len(train_loader) // div
+        len_val_loader = len(val_loader) // div
+
         self.logger.info(f'build model gpu: {rank}')
         model = RankNet(self.config)
         model.to(self.device)
@@ -91,9 +96,10 @@ class RanknetTrainer:
         optimizer = torch.optim.Adam(model.parameters(), lr=self.config['train']['lr'])
         # compiled_model = torch.compile(model)
         if self.config['train']['distributed']['multi_gpu']:
-            optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters())
+            optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters(), op=hvd.Adasum, gradient_predivide_factor=1.0)
             hvd.broadcast_parameters(model.state_dict(), root_rank=0)
-        scheduler = lr_scheduler.StepLR(optimizer, step_size=len(train_loader) * self.config['train']['schedule'], gamma=0.1)
+            hvd.broadcast_optimizer_state(optimizer, root_rank=0)
+        scheduler = lr_scheduler.StepLR(optimizer, step_size=len_train_loader * self.config['train']['schedule'], gamma=0.1)
 
         best_acc = 0
         prev_best = 0
@@ -124,16 +130,16 @@ class RanknetTrainer:
                 acc, _ = self._metric(o, label)
 
                 if writer:
-                    writer.add_scalar(f'train/ranknet_loss', ranknet_loss.item(), epc * len(train_loader) + i)
-                    writer.add_scalar(f'train/ae_loss', ae_loss.item(), epc * len(train_loader) + i)
-                    writer.add_scalar(f'train/accuracy', acc, epc * len(train_loader) + i)
+                    writer.add_scalar(f'train/ranknet_loss', ranknet_loss.item(), epc * len_train_loader + i)
+                    writer.add_scalar(f'train/ae_loss', ae_loss.item(), epc * len_train_loader + i)
+                    writer.add_scalar(f'train/accuracy', acc, epc * len_train_loader + i)
                 losses += loss.item()
 
             if d1 is not None and d2 is not None:
                 out_for_saving1 = d1.view(int(d1.shape[0]/4), 4, *d1.shape[1:])[-1]
                 out_for_saving2 = d2.view(int(d2.shape[0]/4), 4, *d2.shape[1:])[-1]
 
-            self.logger.info(f'[gpu:{rank}]epoch {epc} avg. loss {losses / len(train_loader):.4f}')
+            self.logger.info(f'[gpu:{rank}]epoch {epc} avg. loss {losses / len_train_loader:.4f}')
 
             # write output image to tensorboard
             if writer:
@@ -158,7 +164,7 @@ class RanknetTrainer:
                     cm += cm_tmp
                     accs += acc
                     if writer:
-                        writer.add_scalar(f'val/accuracy', acc, epc * len(val_loader) + i)
+                        writer.add_scalar(f'val/accuracy', acc, epc * len_val_loader + i)
 
                 if writer:
                     if d1 is not None and d2 is not None:
@@ -167,21 +173,21 @@ class RanknetTrainer:
                     writer.add_images(f'val/output_{rank} epc_{epc}', out_for_saving1, epc, dataformats='NCHW')
                     writer.add_images(f'val/output_{rank} epc_{epc}', out_for_saving2, epc, dataformats='NCHW')
 
-                    self.logger.info(f'[gpu:{rank}]epoch {epc} avg. val acc {accs / len(val_loader):.4f}')
+                    self.logger.info(f'[gpu:{rank}]epoch {epc} avg. val acc {accs / len_val_loader:.4f}')
                     cm = pd.DataFrame(cm, index=['dec', 'same', 'inc'], columns=['dec', 'same', 'inc'])
                     plt.figure(figsize=(30, 30))
                     sns.heatmap(cm, annot=True, cmap='Blues')
                     writer.add_figure(f'val/confusion_matrix_{rank} epc_{epc}', plt.gcf())
 
-                if accs / len(val_loader) > best_acc:
-                    prev_best = best_acc
-                    best_acc = accs / len(val_loader)
+            if accs / len_val_loader > best_acc:
+                prev_best = best_acc
+                best_acc = accs / len_val_loader
 
             # model save if validation accuracy is the best
             if rank == 0:
                 if prev_best < best_acc:
-                    torch.save(
-                        model.state_dict(),
+                    hvd.save_checkpoint(
+                        model,
                         os.path.join(self.config['train']['save_dir'],
                                      f'ranknet{self.config["train"]["exp"]}_{epc}.pth')
                     )
