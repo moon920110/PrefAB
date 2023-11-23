@@ -9,17 +9,7 @@ from trainer.ranknet_trainer import RanknetTrainer
 from utils.vis import *
 
 
-def train(config, logger):
-    trainer = RanknetTrainer(config=config, logger=logger)
-    trainer.train()
-
-
-if __name__ == '__main__':
-    os.environ['AUDIODEV'] = 'null'
-    parser = argparse.ArgumentParser(description='PrefAB prototype')
-    parser.add_argument('--config', type=str, default='config/config.yaml')
-    args = parser.parse_args()
-
+def train(config):
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -34,12 +24,22 @@ if __name__ == '__main__':
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 
+    trainer = RanknetTrainer(config=config, logger=logger)
+    trainer.train()
+
+
+if __name__ == '__main__':
+    os.environ['AUDIODEV'] = 'null'
+    parser = argparse.ArgumentParser(description='PrefAB prototype')
+    parser.add_argument('--config', type=str, default='config/config.yaml')
+    args = parser.parse_args()
+
     with open(args.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
     if config['train']['distributed']['multi_gpu']:
         horovod.run(train,
-                    args=(config, logger),
+                    args=(config,),
                     np=config['train']['distributed']['num_gpus'])
     else:
-        train(config, logger)
+        train(config)
