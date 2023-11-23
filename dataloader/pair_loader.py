@@ -33,24 +33,22 @@ class PairLoader(Dataset):
     def init_sequence_dataset(self):
         if self.config['debug']:
             self.dataset = self.dataset[:20]
-        for x, img_path in tqdm(self.dataset, desc=f'Preparing sequential dataset'):
-            for game in x['game'].unique():
-                for player in x['player_id'].unique():
-                    player_data = x[(x['game'] == game) & (x['player_id'] == player)]
-                    if len(player_data) == 0:
-                        continue
+        for player_data, img_path in tqdm(self.dataset, desc=f'Preparing sequential dataset'):  # for each game and player
+            if len(player_data) == 0:
+                continue
 
-                    for idx in range(5, len(player_data)):
-                        seq = player_data.iloc[idx-5:idx]  # stack 5 frames (0~3), (1~4) pair
-                        img_data = [img_path, seq['time_index'].values, seq['time_stamp'].values]
-                        y = seq['pair_rank_label'].values[-1]  # label of the last frame
-                        seq.loc[:, 'game'] = self.config['game_numbering'][self.config['train']['genre']][game]
-                        seq = seq.loc[:, self.numeric_columns]
-                        seq = seq.drop(columns=['pair_rank_label']).values.astype(np.float32)
+            game = player_data['game'].unique()[0]
+            for idx in range(5, len(player_data)):
+                seq = player_data.iloc[idx-5:idx]  # stack 5 frames (0~3), (1~4) pair
+                img_data = [img_path, seq['time_index'].values, seq['time_stamp'].values]
+                y = seq['pair_rank_label'].values[-1]  # label of the last frame
+                seq.loc[:, 'game'] = self.config['game_numbering'][self.config['train']['genre']][game]
+                seq = seq.loc[:, self.numeric_columns]
+                seq = seq.drop(columns=['pair_rank_label', 'epoch', 'engine_tick', 'time_stamp', 'activity', 'score']).values.astype(np.float32)
 
-                        self.x_img_pairs.append(img_data)
-                        self.x_meta_pairs.append(seq)
-                        self.y.append(y)
+                self.x_img_pairs.append(img_data)
+                self.x_meta_pairs.append(seq)
+                self.y.append(y)
 
     def init_dataset(self):
         for x, img_path in tqdm(self.dataset, desc=f'Preparing dataset'):
