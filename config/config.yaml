@@ -20,19 +20,21 @@ game_name:
   Endless: endless
 
 train:
-  exp: horovod_test
+  exp: prefab-val-output-logging
+  base_transformer_model: Bert  # Bert, Built-in
   log_dir: log/
   optimizer: adam
   lr: 0.0001
   epoch: 1000
   genre: Shooter  # All, Shooter, Platformer, Racing
+  game: Heist!
   batch_size: 48  # 128
   train_ratio: 0.8
   val_ratio: 0.1
   dropout: 0.1
   num_workers: 16
-  f_dim: 26506
-  d_model: 200
+  f_dim: 7253 # 26506
+  d_model: 1024
   schedule: 50
   save_dir: log/model
   distributed:
@@ -44,7 +46,7 @@ train:
     backend: nccl
     seed: 1125
 
-debug: true
+debug: false
 
 game_numbering:
   All:

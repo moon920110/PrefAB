@@ -106,6 +106,7 @@ class RanknetTrainer:
         for epc in range(self.config['train']['epoch']):
             losses = 0
             d1, d2 = None, None
+            cm = np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]])
             model.train()
 
             if self.config['train']['distributed']['multi_gpu']:
@@ -118,16 +119,18 @@ class RanknetTrainer:
                 img2 = img2.to(self.device)
                 feature2 = feature2.to(self.device)
                 label = label.to(self.device)
+                mask = torch.ones(feature1.shape[0], feature1.shape[1]).to(self.device)
 
                 optimizer.zero_grad()
-                o, d1, d2 = model(img1, feature1, img2, feature2)
+                o, d1, d2 = model(img1, feature1, img2, feature2, mask)
                 ranknet_loss = rank_criterion(o, label)
                 ae_loss = ae_criterion(d1, img1.view(-1, *img1.shape[2:])) + ae_criterion(d2, img2.view(-1, *img2.shape[2:]))
                 loss = ranknet_loss + ae_loss
                 loss.backward()
                 optimizer.step()
                 scheduler.step()
-                acc, _ = self._metric(o, label)
+                acc, cm_tmp = self._metric(o, label)
+                cm += cm_tmp
 
                 if writer:
                     writer.add_scalar(f'train/ranknet_loss', ranknet_loss.item(), epc * len_train_loader + i)
@@ -143,8 +146,12 @@ class RanknetTrainer:
 
             # write output image to tensorboard
             if writer:
-                writer.add_images(f'train/output_{rank} epc_{epc}', out_for_saving1, epc, dataformats='NCHW')
-                writer.add_images(f'train/output_{rank} epc_{epc}', out_for_saving2, epc, dataformats='NCHW')
+                writer.add_images(f'train/epc_{epc}_output_1', out_for_saving1, epc, dataformats='NCHW')
+                writer.add_images(f'train/epc_{epc}_output_2', out_for_saving2, epc, dataformats='NCHW')
+                cm = pd.DataFrame(cm, index=['dec', 'same', 'inc'], columns=['dec', 'same', 'inc'])
+                plt.figure(figsize=(30, 30))
+                sns.heatmap(cm, annot=True, cmap='Blues')
+                writer.add_figure(f'train/confusion_matrix_{rank} epc_{epc}', plt.gcf())
 
             model.eval()
             with torch.no_grad():
@@ -157,8 +164,9 @@ class RanknetTrainer:
                     img2 = img2.to(self.device)
                     feature2 = feature2.to(self.device)
                     label = label.to(self.device)
+                    mask = torch.ones(feature1.shape[0], feature1.shape[1]).to(self.device)
 
-                    o, d1, d2 = model(img1, feature1, img2, feature2)
+                    o, d1, d2 = model(img1, feature1, img2, feature2, mask)
 
                     acc, cm_tmp = self._metric(o, label)
                     cm += cm_tmp
@@ -170,8 +178,8 @@ class RanknetTrainer:
                     if d1 is not None and d2 is not None:
                         out_for_saving1 = d1.view(int(d1.shape[0] / 4), 4, *d1.shape[1:])[-1]
                         out_for_saving2 = d2.view(int(d2.shape[0] / 4), 4, *d2.shape[1:])[-1]
-                    writer.add_images(f'val/output_{rank} epc_{epc}', out_for_saving1, epc, dataformats='NCHW')
-                    writer.add_images(f'val/output_{rank} epc_{epc}', out_for_saving2, epc, dataformats='NCHW')
+                    writer.add_images(f'val/epc_{epc}_output_1', out_for_saving1, epc, dataformats='NCHW')
+                    writer.add_images(f'val/epc_{epc}_output_2', out_for_saving2, epc, dataformats='NCHW')
 
                     self.logger.info(f'[gpu:{rank}]epoch {epc} avg. val acc {accs / len_val_loader:.4f}')
                     cm = pd.DataFrame(cm, index=['dec', 'same', 'inc'], columns=['dec', 'same', 'inc'])
@@ -179,45 +187,22 @@ class RanknetTrainer:
                     sns.heatmap(cm, annot=True, cmap='Blues')
                     writer.add_figure(f'val/confusion_matrix_{rank} epc_{epc}', plt.gcf())
 
-            if accs / len_val_loader > best_acc:
+            if (accs / len_val_loader) > best_acc:
                 prev_best = best_acc
                 best_acc = accs / len_val_loader
 
             # model save if validation accuracy is the best
             if rank == 0:
                 if prev_best < best_acc:
-                    hvd.save_checkpoint(
-                        model,
+                    torch.save(
+                        model.state_dict(),
                         os.path.join(self.config['train']['save_dir'],
                                      f'ranknet{self.config["train"]["exp"]}_{epc}.pth')
                     )
         writer.close()
 
     def _metric(self, y_pred, y_true):
-        # set all elements less than 1/3 to 0, greater than 2/3 to 1, otherwise 0.5 in y_pred
-        # y_pred = torch.where(y_pred < 1/3, torch.zeros_like(y_pred), y_pred)
-        # y_pred = torch.where(y_pred > 2/3, torch.ones_like(y_pred), y_pred)
-        # y_pred = torch.where((y_pred >= 1/3) & (y_pred <= 2/3), torch.ones_like(y_pred) * 0.5, y_pred)
-
-        # acc = (y_pred == y_true).sum().item() / len(y_pred)
-        # cm = self._confusion_matrix(y_true, y_pred)
-
         acc = accuracy_score(y_true.cpu().detach().numpy(), y_pred.cpu().detach().numpy().argmax(axis=1))
         cm = confusion_matrix(y_true.cpu().detach().numpy(), y_pred.cpu().detach().numpy().argmax(axis=1), labels=[0, 1, 2])
 
         return acc, cm
-
-    def _confusion_matrix(self, y_true, y_pred):
-        result = np.zeros((3, 3))
-        label = [0, 1, 2]
-
-        for i, v in enumerate(label):
-            v_idx = (y_true == v)
-            p_v = y_pred[v_idx]
-
-            if len(p_v) == 0:
-                continue
-
-            for j, p in enumerate(label):
-                result[j, i] = (p_v == p).sum()
-        return result
