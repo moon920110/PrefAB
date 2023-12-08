@@ -1,4 +1,5 @@
-import os
+import time
+import json
 
 import logging
 import argparse
@@ -20,9 +21,12 @@ def train(config):
 
     if not os.path.exists('log'):
         os.makedirs('log')
-    fh = logging.FileHandler('log/log.log')
+    fh = logging.FileHandler(f"log/{config['train']['exp']}_{time.strftime('%Y-%m-%d-%H-%M-%S')}.log")
     fh.setFormatter(formatter)
     logger.addHandler(fh)
+
+    logger.info(json.dumps(config, indent=4, sort_keys=False))
+
 
     trainer = RanknetTrainer(config=config, logger=logger)
     trainer.train()
