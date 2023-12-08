@@ -14,13 +14,13 @@ class RankNet(nn.Module):
         self.config = config
 
         f_dim = config['train']['f_dim']
-        if config['train']['base_transformer_model'] == 'bert':
+        if config['train']['base_transformer_model'] == 'Bert':
             self.transformer_encoder = AutoModel.from_pretrained('bert-base-uncased')
             d_model = self.transformer_encoder.config.hidden_size
         else:
             d_model = config['train']['d_model']
             encoder_layers = TransformerEncoderLayer(d_model=d_model, nhead=8, dropout=config['train']['dropout'], batch_first=True)
-            self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers=6)
+            self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers=self.config['train']['num_transform_layers'])
 
         self.autoencoder = AutoEncoder()
 
