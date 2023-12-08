@@ -48,8 +48,6 @@ class RanknetTrainer:
         if not os.path.exists(self.config['train']['save_dir']):
             os.makedirs(self.config['train']['save_dir'])
 
-        train_sampler = None
-        val_sampler = None
         rank = 0
         if self.config['train']['distributed']['multi_gpu']:
             rank = hvd.rank()
@@ -108,6 +106,9 @@ class RanknetTrainer:
             d1, d2 = None, None
             cm = np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]])
             model.train()
+            l0_cnt = 0
+            l1_cnt = 0
+            l2_cnt = 0
 
             if self.config['train']['distributed']['multi_gpu']:
                 train_sampler.set_epoch(epc)
@@ -120,6 +121,10 @@ class RanknetTrainer:
                 feature2 = feature2.to(self.device)
                 label = label.to(self.device)
                 mask = torch.ones(feature1.shape[0], feature1.shape[1]).to(self.device)
+
+                l0_cnt += len(label[label == 0])
+                l1_cnt += len(label[label == 1])
+                l2_cnt += len(label[label == 2])
 
                 optimizer.zero_grad()
                 o, d1, d2 = model(img1, feature1, img2, feature2, mask)
@@ -142,7 +147,11 @@ class RanknetTrainer:
                 out_for_saving1 = d1.view(int(d1.shape[0]/4), 4, *d1.shape[1:])[-1]
                 out_for_saving2 = d2.view(int(d2.shape[0]/4), 4, *d2.shape[1:])[-1]
 
-            self.logger.info(f'[gpu:{rank}]epoch {epc} avg. loss {losses / len_train_loader:.4f}')
+            total_cnt = l0_cnt + l1_cnt + l2_cnt
+            self.logger.info(f'[gpu:{rank}]epoch {epc} avg. loss {losses / len_train_loader:.4f} '
+                             f'l0_ratio {l0_cnt / total_cnt:.4f} '
+                             f'l1_ratio {l1_cnt / total_cnt:.4f} '
+                             f'l2_ratio {l2_cnt / total_cnt:.4f}')
 
             # write output image to tensorboard
             if writer:
@@ -187,9 +196,9 @@ class RanknetTrainer:
                     sns.heatmap(cm, annot=True, cmap='Blues')
                     writer.add_figure(f'val/confusion_matrix_{rank} epc_{epc}', plt.gcf())
 
-            if (accs / len_val_loader) > best_acc:
-                prev_best = best_acc
-                best_acc = accs / len_val_loader
+                if (accs / len_val_loader) > best_acc:
+                    prev_best = best_acc
+                    best_acc = accs / len_val_loader
 
             # model save if validation accuracy is the best
             if rank == 0:
