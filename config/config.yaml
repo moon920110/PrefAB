@@ -47,7 +47,10 @@ train:
     backend: nccl
     seed: 1125
 
-debug: false
+debug:
+  activate: false
+  limit_player: true
+  data_limit: 20
 
 game_numbering:
   All:
@@ -72,3 +75,6 @@ game_numbering:
     TinyCars: 0
     Solid: 1
     ApexSpeed: 2
+  total_cnt: 9
+  genre_cnt: 3
+  game_cnt_per_genre: 3

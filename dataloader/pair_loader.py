@@ -31,25 +31,31 @@ class PairLoader(Dataset):
             self.init_dataset()
 
     def init_sequence_dataset(self):
-        if self.config['debug']:
-            self.dataset = self.dataset[:20]
+        if self.config['debug']['activate']:
+            self.dataset = self.dataset[:self.config['debug']['data_limit']]  # limit for a part of one game
         for player_data, img_path in tqdm(self.dataset, desc=f'Preparing sequential dataset'):  # for each game and player
             if len(player_data) == 0:
                 continue
 
-            game = player_data['game'].unique()[0]
+            if self.config['debug']['activate'] and self.config['debug']['limit_player']:
+                if player_data['player_idx'].unique()[0] != 0:
+                    continue
+
             for idx in range(5, len(player_data)):
                 seq = player_data.iloc[idx-5:idx]  # stack 5 frames (0~3), (1~4) pair
                 img_data = [img_path, seq['time_index'].values, seq['time_stamp'].values]
                 y = seq['pair_rank_label'].values[-1]  # label of the last frame
-                seq.loc[:, 'game'] = self.config['game_numbering'][self.config['train']['genre']][game]
                 seq = seq.loc[:, self.numeric_columns]
-                seq = seq.drop(columns=['pair_rank_label', 'epoch', 'engine_tick', 'time_stamp', 'activity', 'score']).values.astype(np.float32)
+                seq = seq.drop(columns=['player_idx', 'pair_rank_label', 'epoch', 'engine_tick', 'time_stamp', 'activity', 'score']).values.astype(np.float32)
+                # TODO: Add player related information
 
                 self.x_img_pairs.append(img_data)
                 self.x_meta_pairs.append(seq)
                 self.y.append(y)
 
+    ''' 
+        DEPRECATED
+    '''
     def init_dataset(self):
         for x, img_path in tqdm(self.dataset, desc=f'Preparing dataset'):
             for game in x['game'].unique():
@@ -63,7 +69,6 @@ class PairLoader(Dataset):
                         row['game'] = self.config['game_numbering'][self.config['train']['genre']][game]
                         row = row.loc[self.numeric_columns]
                         row = row.drop(columns=['pair_rank_label']).astype(np.float32)
-                        # TODO: Add player related information
 
                         self.x_img_pairs.append(img_data)
                         self.x_meta_pairs.append(row)

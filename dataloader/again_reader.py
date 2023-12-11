@@ -17,13 +17,18 @@ class AgainReader:
                                  low_memory=False)
         self.again.columns = [col.split(']')[-1] for col in self.again.columns]
 
-    def _prepare_ordinal_dataset(self, target, target_name):
-        if target == 'game':
-            again = self.game_info_by_name(target_name)
-        elif target == 'genre':
-            again = self.game_info_by_genre(target_name)
+    def _prepare_ordinal_dataset(self, domain, scope):
+        if domain == 'game':
+            again = self.game_info_by_name(scope)
+            again['game_idx'] = 0
+        elif domain == 'genre':
+            again = self.game_info_by_genre(scope)
+            games = again['game'].unique()
+            for game in games:
+                again.loc[again['game'] == game, 'game_idx'] = self.config['game_numbering'][scope][game] / self.config['game_numbering']['game_cnt_per_genre']
         else:
             again = self.again
+        again['player_idx'] = pd.factorize(again['player_id'])[0]
 
         # get arousal diff by frame interval
         arousal_diff = again.groupby(['player_id', 'game'])['arousal'].diff()
@@ -36,14 +41,13 @@ class AgainReader:
         return again
 
     def prepare_sequential_ranknet_dataset(self):
-        data = self._prepare_ordinal_dataset(target='genre', target_name=self.config['train']['genre'])
+        data = self._prepare_ordinal_dataset(domain=self.config['train']['domain'], scope=self.config['train']['genre'])
         x = []
         total_iter = len(data['game'].unique()) * len(data['player_id'].unique())
         pbar = tqdm(total=total_iter, desc='Preparing sequential dataset')
         numeric_columns = data.select_dtypes(include=['number']).columns
-        # add game at the first
-        numeric_columns = ['game'] + list(numeric_columns)
 
+        # a game log for each player
         for game in data['game'].unique():
             for player in data['player_id'].unique():
                 pbar.update(1)
