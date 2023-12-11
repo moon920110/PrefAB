@@ -55,13 +55,13 @@ class RanknetTrainer:
             val_sampler = DistributedWeightedSampler(self.val_dataset, num_replicas=hvd.size(), rank=rank)
             writer = SummaryWriter(
                 log_dir=os.path.join(self.config['train']['log_dir'],
-                                     f"{self.config['train']['exp']}_{time.strftime('%Y-%m-%d-%H-%M-%S')}"
+                                     f"{self.config['train']['exp']}"
                                      )
             ) if rank == 0 else None
         else:
             writer = SummaryWriter(
                 log_dir=os.path.join(self.config['train']['log_dir'],
-                                     f"{self.config['train']['exp']}_{time.strftime('%Y-%m-%d-%H-%M-%S')}"
+                                     f"{self.config['train']['exp']}"
                                      )
             )
             train_sampler = WeightedSampler(self.train_dataset)
@@ -201,13 +201,13 @@ class RanknetTrainer:
                     best_acc = accs / len_val_loader
 
             # model save if validation accuracy is the best
-            if rank == 0:
-                if prev_best < best_acc:
-                    torch.save(
-                        model.state_dict(),
-                        os.path.join(self.config['train']['save_dir'],
-                                     f'ranknet{self.config["train"]["exp"]}_{epc}.pth')
-                    )
+            # if rank == 0:
+            #     if prev_best < best_acc:
+            #         torch.save(
+            #             model.state_dict(),
+            #             os.path.join(self.config['train']['save_dir'],
+            #                          f'ranknet{self.config["train"]["exp"]}_{epc}.pth')
+            #         )
         writer.close()
 
     def _metric(self, y_pred, y_true):
