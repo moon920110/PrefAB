@@ -20,22 +20,23 @@ game_name:
   Endless: endless
 
 train:
-  exp: prefab-vanilla-shedule10
+  exp: prefab-vanilla
   base_transformer_model: Built-in  # Bert, Built-in
   log_dir: log/
   optimizer: adam
   lr: 0.0001
   epoch: 1000
+  domain: genre  # genre, game
   genre: Shooter  # All, Shooter, Platformer, Racing
   game: Heist!
-  num_transform_layers: 8
-  batch_size: 48  # 128
+  num_transform_layers: 6
+  batch_size: 64  # 128
   train_ratio: 0.8
   val_ratio: 0.1
   dropout: 0.1  # 0.5 is trash
   num_workers: 16
   f_dim: 7253
-  d_model: 1024
+  d_model: 4096
   schedule: 10
   save_dir: log/model
   distributed:

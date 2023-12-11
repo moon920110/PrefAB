@@ -12,6 +12,8 @@ class RankNet(nn.Module):
     def __init__(self, config):
         super(RankNet, self).__init__()
         self.config = config
+        ext_layers = []
+        fc_layers = []
 
         f_dim = config['train']['f_dim']
         if config['train']['base_transformer_model'] == 'Bert':
@@ -24,31 +26,30 @@ class RankNet(nn.Module):
 
         self.autoencoder = AutoEncoder()
 
-        self.extractor = nn.Sequential(
-            nn.Linear(f_dim, 8192),
-            nn.BatchNorm1d(8192),
-            nn.LeakyReLU(),
-            nn.Dropout1d(config['train']['dropout']),
-            nn.Linear(8192, 4096),
-            nn.BatchNorm1d(4096),
-            nn.LeakyReLU(),
-            nn.Dropout1d(config['train']['dropout']),
-            nn.Linear(4096, 2048),
-            nn.BatchNorm1d(2048),
-            nn.LeakyReLU(),
-            nn.Dropout1d(config['train']['dropout']),
-            nn.Linear(2048, d_model),
-            nn.BatchNorm1d(d_model),
-            nn.LeakyReLU(),
-            nn.Dropout1d(config['train']['dropout']),
-        )
+        while f_dim > d_model:
+            ext_layers.append(nn.Linear(f_dim, f_dim//2))
+            ext_layers.append(nn.BatchNorm1d(f_dim//2))
+            ext_layers.append(nn.LeakyReLU())
+            ext_layers.append(nn.Dropout1d(config['train']['dropout']))
+            f_dim = f_dim // 2
+        ext_layers.append(nn.Linear(f_dim, d_model))
+        ext_layers.append(nn.BatchNorm1d(d_model))
+        ext_layers.append(nn.LeakyReLU())
+        ext_layers.append(nn.Dropout1d(config['train']['dropout']))
+        f_dim = d_model
+
+        self.extractor = nn.Sequential(*ext_layers)
         self.pos_encoder = PositionalEncoding(d_model, dropout=config['train']['dropout'])
 
-        self.fc = nn.Sequential(
-            nn.Linear(d_model, 256),
-            nn.ReLU(),
-            nn.Linear(256, 3),
-        )
+        while f_dim >= 64:
+            fc_layers.append(nn.Linear(f_dim, f_dim//2))
+            fc_layers.append(nn.BatchNorm1d(f_dim//2))
+            fc_layers.append(nn.ReLU())
+            fc_layers.append(nn.Dropout(config['train']['dropout']))
+            f_dim = f_dim // 2
+        fc_layers.append(nn.Linear(f_dim, 3))
+
+        self.fc = nn.Sequential(*fc_layers)
 
         if config['train']['base_transformer_model'] == 'Built-in':
             self._init_weights()
