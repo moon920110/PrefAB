@@ -10,7 +10,8 @@ class AgainReader:
         self.config = config
         self.logger = logger
 
-        self.logger.info(f'data from {os.path.join(self.data_path, "clean_data", "clean_data.csv")}')
+        if self.logger is not None:
+            self.logger.info(f'data from {os.path.join(self.data_path, "clean_data", "clean_data.csv")}')
         # read csv without row index
         self.again = pd.read_csv(os.path.join(self.data_path, 'clean_data', 'clean_data.csv'),
                                  encoding='utf-8',

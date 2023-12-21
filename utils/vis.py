@@ -1,10 +1,13 @@
 import os
+import yaml
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
 from moviepy.editor import VideoFileClip
 import cv2
+
+from dataloader.again_reader import AgainReader
 
 
 def plot_ordinal_arousal(data, title):
@@ -51,42 +54,14 @@ def plot_arousal(data, title):
     plt.show()
 
 
-def plot_arousal_with_video(game_data, video_path, config):
-    player_ids = game_data['player_id'].unique()
+if __name__ == "__main__":
+    with open('config/config.yaml') as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+    again = AgainReader(config).game_info_by_name('Shootout')
+    again['time_index'] = again['time_index'].apply(
+        lambda x: sum([a * b for a, b in zip([3600, 60, 1], map(float, x[7:].split(':')))]))
+    player = again['player_id'].unique()[0]
+    arousal_data = again[again['player_id'] == player]
+    arousal_data = arousal_data.sort_values('time_index')
 
-    player_data = game_data[game_data['player_id'] == player_ids[0]]
-    parc_id = player_data['player_id'].unique()[0]
-    game_name = config['game_name'][player_data['game'].unique()[0]]
-    session_id = player_data['session_id'].unique()[0]
-    video_name = f'{parc_id}_{game_name}_{session_id}.mp4'
-
-    print(f'read: {os.path.join(video_path, video_name)}')
-
-    video = VideoFileClip(os.path.join(video_path, video_name))
-    duration = video.duration
-    # video.preview()
-    # cap = cv2.VideoCapture(os.path.join(video_path, video_name))
-    # if not cap.isOpened():
-    #     print('Error: Unable to open video')
-
-    fig, ax = plt.subplots()
-
-    # def get_frame():
-    #     ret, frame = cap.read()
-    #     if not ret:
-    #         return None
-    #     return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-    # frame = get_frame()
-    im = ax.imshow(video.get_frame(0))
-
-    def update(t):
-        frame = video.get_frame(t)
-        im.set_array(frame)
-        return im
-
-    ani = FuncAnimation(fig, update, frames=np.linspace(0, duration, int(duration*10)))
-    # plt.plot(player_data['[control]time_index'], player_data['[output]arousal'])
-    plt.show()
-    # cap.release()
-    # cv2.destroyAllWindows()
+    plot_arousal(arousal_data, 'Shootout')
