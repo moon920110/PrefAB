@@ -39,6 +39,7 @@ train:
   d_model: 4096
   schedule: 10
   save_dir: log/model
+  data_balancing: false
   distributed:
     multi_gpu: true
     num_gpus: 4

@@ -12,6 +12,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader, random_split
+from torch.utils.data.distributed import DistributedSampler
 from sklearn.metrics import confusion_matrix, accuracy_score
 
 from dataloader.pair_loader import PairLoader
@@ -51,8 +52,8 @@ class RanknetTrainer:
         rank = 0
         if self.config['train']['distributed']['multi_gpu']:
             rank = hvd.rank()
-            train_sampler = DistributedWeightedSampler(self.train_dataset, num_replicas=hvd.size(), rank=rank)
-            val_sampler = DistributedWeightedSampler(self.val_dataset, num_replicas=hvd.size(), rank=rank)
+            train_sampler = DistributedWeightedSampler(self.train_dataset, num_replicas=hvd.size(), rank=rank) if self.config['train']['data_balancing'] else DistributedSampler(self.train_dataset, num_replicas=hvd.size(), rank=rank)
+            val_sampler = DistributedWeightedSampler(self.val_dataset, num_replicas=hvd.size(), rank=rank) if self.config['train']['data_balancing'] else DistributedSampler(self.train_dataset, num_replicas=hvd.size(), rank=rank)
             writer = SummaryWriter(
                 log_dir=os.path.join(self.config['train']['log_dir'],
                                      f"{self.config['train']['exp']}"
@@ -64,8 +65,8 @@ class RanknetTrainer:
                                      f"{self.config['train']['exp']}"
                                      )
             )
-            train_sampler = WeightedSampler(self.train_dataset)
-            val_sampler = WeightedSampler(self.val_dataset)
+            train_sampler = WeightedSampler(self.train_dataset) if self.config['train']['data_balancing'] else None
+            val_sampler = WeightedSampler(self.val_dataset) if self.config['train']['data_balancing'] else None
 
         # (batch, pair, sequence, channel, height, width)
         train_loader = DataLoader(self.train_dataset,
@@ -82,8 +83,8 @@ class RanknetTrainer:
                                 pin_memory=True)
 
         div = 4 if self.config['train']['distributed']['multi_gpu'] else 1
-        len_train_loader = len(train_loader) // div
-        len_val_loader = len(val_loader) // div
+        len_train_loader = len(train_loader) // div if len(train_loader) > div else 1
+        len_val_loader = len(val_loader) // div if len(val_loader) > div else 1
 
         self.logger.info(f'build model gpu: {rank}')
         model = RankNet(self.config)
