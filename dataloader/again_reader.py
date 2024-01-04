@@ -42,7 +42,9 @@ class AgainReader:
         return again
 
     def prepare_sequential_ranknet_dataset(self):
-        data = self._prepare_ordinal_dataset(domain=self.config['train']['domain'], scope=self.config['train']['genre'])
+        domain = self.config['train']['domain']
+        scope = self.config['train']['genre'] if domain == 'genre' else self.config['train']['game']
+        data = self._prepare_ordinal_dataset(domain=domain, scope=scope)
         x = []
         total_iter = len(data['game'].unique()) * len(data['player_id'].unique())
         pbar = tqdm(total=total_iter, desc='Preparing sequential dataset')
@@ -85,6 +87,11 @@ class AgainReader:
     def available_feature_names(self, target, target_name):
         game_info = self.unique_game_info()
         return game_info[game_info[target] == target_name].dropna(axis=1, how='any').columns
+
+    def compute_second_order_diff(self):
+        """Compute second order difference of arousal to find non-linear point"""
+        self.again['arousal_diff'] = self.again.groupby(['player_id', 'game'])['arousal'].diff()
+        self.again['arousal_diff_2'] = self.again.groupby(['player_id', 'game'])['arousal_diff'].diff()
 
 
 if __name__ == "__main__":
