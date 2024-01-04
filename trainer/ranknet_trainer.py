@@ -53,7 +53,7 @@ class RanknetTrainer:
         if self.config['train']['distributed']['multi_gpu']:
             rank = hvd.rank()
             train_sampler = DistributedWeightedSampler(self.train_dataset, num_replicas=hvd.size(), rank=rank) if self.config['train']['data_balancing'] else DistributedSampler(self.train_dataset, num_replicas=hvd.size(), rank=rank)
-            val_sampler = DistributedWeightedSampler(self.val_dataset, num_replicas=hvd.size(), rank=rank) if self.config['train']['data_balancing'] else DistributedSampler(self.train_dataset, num_replicas=hvd.size(), rank=rank)
+            val_sampler = DistributedWeightedSampler(self.val_dataset, num_replicas=hvd.size(), rank=rank) if self.config['train']['data_balancing'] else DistributedSampler(self.val_dataset, num_replicas=hvd.size(), rank=rank)
             writer = SummaryWriter(
                 log_dir=os.path.join(self.config['train']['log_dir'],
                                      f"{self.config['train']['exp']}"
