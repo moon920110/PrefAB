@@ -4,7 +4,6 @@ import yaml
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
-from moviepy.editor import VideoFileClip
 import cv2
 
 from dataloader.again_reader import AgainReader
@@ -34,7 +33,7 @@ def plot_ordinal_arousal(data, title):
     plt.show()
 
 
-def plot_arousal(data, title):
+def plot_arousal(data, title, references=None):
     games = data['game'].unique()
 
     fig_num = 1
@@ -46,11 +45,15 @@ def plot_arousal(data, title):
         plt.title(f'{title}_{game}')
         i = 0
         for player_id, player_data in game_data:
-            plt.plot(player_data['time_index'], player_data['arousal'])
+            plt.plot(player_data['time_index'], player_data['arousal'], label='arousal')
+            if references is not None:
+                for reference in references:
+                    plt.plot(player_data['time_index'], player_data[reference], label=f'{reference}')
             i += 1
             if i > 10:
                 break
         fig_num += 1
+        plt.legend()
     plt.show()
 
 
