@@ -25,6 +25,7 @@ class RanknetTrainer:
     def __init__(self, config, logger):
         self.config = config
         self.logger = logger
+        self.window_size = config['train']['window_size']
 
         dataset = PairLoader(config, logger)
         train_size = int(len(dataset) * config['train']['train_ratio'])
@@ -53,7 +54,7 @@ class RanknetTrainer:
         if self.config['train']['distributed']['multi_gpu']:
             rank = hvd.rank()
             train_sampler = DistributedWeightedSampler(self.train_dataset, num_replicas=hvd.size(), rank=rank) if self.config['train']['data_balancing'] else DistributedSampler(self.train_dataset, num_replicas=hvd.size(), rank=rank)
-            val_sampler = DistributedWeightedSampler(self.val_dataset, num_replicas=hvd.size(), rank=rank) if self.config['train']['data_balancing'] else DistributedSampler(self.val_dataset, num_replicas=hvd.size(), rank=rank)
+            val_sampler = DistributedWeightedSampler(self.val_dataset, num_replicas=hvd.size(), rank=rank)  #  if self.config['train']['data_balancing'] else DistributedSampler(self.val_dataset, num_replicas=hvd.size(), rank=rank)
             writer = SummaryWriter(
                 log_dir=os.path.join(self.config['train']['log_dir'],
                                      f"{self.config['train']['exp']}"
@@ -82,9 +83,10 @@ class RanknetTrainer:
                                 shuffle=(val_sampler is None),
                                 pin_memory=True)
 
-        div = 4 if self.config['train']['distributed']['multi_gpu'] else 1
-        len_train_loader = len(train_loader) // div if len(train_loader) > div else 1
-        len_val_loader = len(val_loader) // div if len(val_loader) > div else 1
+        train_div = self.config['train']['distributed']['num_gpus'] if self.config['train']['distributed']['multi_gpu'] and self.config['train']['data_balancing'] else 1
+        eval_div = self.config['train']['distributed']['num_gpus'] if self.config['train']['distributed']['multi_gpu'] else 1
+        len_train_loader = len(train_loader) // train_div if len(train_loader) > train_div else 1
+        len_val_loader = len(val_loader) // eval_div if len(val_loader) > eval_div else 1
 
         self.logger.info(f'build model gpu: {rank}')
         model = RankNet(self.config)
@@ -131,7 +133,7 @@ class RanknetTrainer:
                 o, d1, d2 = model(img1, feature1, img2, feature2, mask)
                 ranknet_loss = rank_criterion(o, label)
                 ae_loss = ae_criterion(d1, img1.view(-1, *img1.shape[2:])) + ae_criterion(d2, img2.view(-1, *img2.shape[2:]))
-                loss = ranknet_loss + ae_loss
+                loss = ranknet_loss + ae_loss * self.config['train']['ae_loss_weight']
                 loss.backward()
                 optimizer.step()
                 scheduler.step()
@@ -142,11 +144,12 @@ class RanknetTrainer:
                     writer.add_scalar(f'train/ranknet_loss', ranknet_loss.item(), epc * len_train_loader + i)
                     writer.add_scalar(f'train/ae_loss', ae_loss.item(), epc * len_train_loader + i)
                     writer.add_scalar(f'train/accuracy', acc, epc * len_train_loader + i)
+                    writer.add_scalar(f'train/loss', loss.item(), epc * len_train_loader + i)
                 losses += loss.item()
 
             if d1 is not None and d2 is not None:
-                out_for_saving1 = d1.view(int(d1.shape[0]/4), 4, *d1.shape[1:])[-1]
-                out_for_saving2 = d2.view(int(d2.shape[0]/4), 4, *d2.shape[1:])[-1]
+                out_for_saving1 = d1.view(int(d1.shape[0]/self.window_size), self.window_size, *d1.shape[1:])[-1]
+                out_for_saving2 = d2.view(int(d2.shape[0]/self.window_size), self.window_size, *d2.shape[1:])[-1]
 
             total_cnt = l0_cnt + l1_cnt + l2_cnt
             self.logger.info(f'[gpu:{rank}]epoch {epc} avg. loss {losses / len_train_loader:.4f} '
@@ -186,8 +189,8 @@ class RanknetTrainer:
 
                 if writer:
                     if d1 is not None and d2 is not None:
-                        out_for_saving1 = d1.view(int(d1.shape[0] / 4), 4, *d1.shape[1:])[-1]
-                        out_for_saving2 = d2.view(int(d2.shape[0] / 4), 4, *d2.shape[1:])[-1]
+                        out_for_saving1 = d1.view(int(d1.shape[0] / self.window_size), self.window_size, *d1.shape[1:])[-1]
+                        out_for_saving2 = d2.view(int(d2.shape[0] / self.window_size), self.window_size, *d2.shape[1:])[-1]
                     writer.add_images(f'val/epc_{epc}_output_1', out_for_saving1, epc, dataformats='NCHW')
                     writer.add_images(f'val/epc_{epc}_output_2', out_for_saving2, epc, dataformats='NCHW')
 

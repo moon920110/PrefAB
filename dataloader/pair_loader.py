@@ -13,6 +13,8 @@ class PairLoader(Dataset):
     def __init__(self, config, logger=None):
         self.dataset, self.numeric_columns = AgainReader(config, logger).prepare_sequential_ranknet_dataset()
         self.config = config
+        self.window_size = config['train']['window_size']
+        self.window_stride = config['train']['window_stride']
 
         self.x_img_pairs = []
         self.x_meta_pairs = []
@@ -33,6 +35,8 @@ class PairLoader(Dataset):
     def init_sequence_dataset(self):
         if self.config['debug']['activate']:
             self.dataset = self.dataset[:self.config['debug']['data_limit']]  # limit for a part of one game
+
+        offset = self.window_size + self.window_stride
         for player_data, img_path in tqdm(self.dataset, desc=f'Preparing sequential dataset'):  # for each game and player
             if len(player_data) == 0:
                 continue
@@ -41,13 +45,13 @@ class PairLoader(Dataset):
                 if player_data['player_idx'].unique()[0] != 0:
                     continue
 
-            for idx in range(5, len(player_data)):
-                seq = player_data.iloc[idx-5:idx]  # stack 5 frames (0~3), (1~4) pair
+            for idx in range(0, len(player_data)-offset+1):
+                seq = player_data.iloc[idx:idx+offset]  # stack `window_size` frames (0~win_size-1), (4~win_size+win_stride) pair
                 img_data = [img_path, seq['time_index'].values, seq['time_stamp'].values]
                 y = seq['pair_rank_label'].values[-1]  # label of the last frame
                 seq = seq.loc[:, self.numeric_columns]
                 seq = seq.drop(columns=['player_idx', 'pair_rank_label', 'epoch', 'engine_tick', 'time_stamp', 'activity', 'score']).values.astype(np.float32)
-                # TODO: Add player related information
+                # TODO: Add player related information (biography)
 
                 self.x_img_pairs.append(img_data)
                 self.x_meta_pairs.append(seq)
@@ -98,17 +102,17 @@ class PairLoader(Dataset):
                 # (sequence, height, width, channel)
                 compare_frames = torch.stack(
                     [self.transform(Image.fromarray(np.array(f[f'frames/{time_index}_{time_stamp}'])))
-                     for time_index, time_stamp in zip(time_indices[:4], time_stamps[:4])])
+                     for time_index, time_stamp in zip(time_indices[:self.window_size], time_stamps[:self.window_size])])
                 # (sequence, height, width, channel) to (sequence, channel, height, width) // open cv BGR format 0~255
                 main_frames = torch.stack(
                     [self.transform(Image.fromarray(np.array(f[f'frames/{time_index}_{time_stamp}'])))
-                     for time_index, time_stamp in zip(time_indices[1:], time_stamps[1:])])
+                     for time_index, time_stamp in zip(time_indices[-self.window_size:], time_stamps[-self.window_size:])])
 
             # 4, 3, 320, 480 [frames]
             return compare_frames, \
-                torch.tensor(meta[:4]), \
+                torch.tensor(meta[:self.window_size]), \
                 main_frames, \
-                torch.tensor(meta[1:]), \
+                torch.tensor(meta[-self.window_size:]), \
                 torch.tensor(y)
 
         else:

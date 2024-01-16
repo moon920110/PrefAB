@@ -8,14 +8,14 @@ class AutoEncoder(nn.Module):
 
         self.conv1 = nn.Conv2d(3, 16, 5, 2, 2)
         self.bn1 = nn.BatchNorm2d(16)
-        self.conv2 = nn.Conv2d(16, 8, 3, 2, 1)
+        self.conv2 = nn.Conv2d(16, 8, 5, )
         self.bn2 = nn.BatchNorm2d(8)
         self.conv3 = nn.Conv2d(8, 3, 3, 2, 1)
         self.bn3 = nn.BatchNorm2d(3)
 
         self.conv_t1 = nn.ConvTranspose2d(3, 8, 3, 2, 1, 1)
         self.bn_t1 = nn.BatchNorm2d(8)
-        self.conv_t2 = nn.ConvTranspose2d(16, 16, 3, 2, 1, 1)
+        self.conv_t2 = nn.ConvTranspose2d(16, 16, 5)
         self.bn_t2 = nn.BatchNorm2d(16)
         self.conv_t3 = nn.ConvTranspose2d(32, 3, 5, 2, 2, 1)
         self.bn_t3 = nn.BatchNorm2d(3)

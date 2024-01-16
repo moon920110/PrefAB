@@ -12,6 +12,7 @@ class RankNet(nn.Module):
     def __init__(self, config):
         super(RankNet, self).__init__()
         self.config = config
+        self.window_size = config['train']['window_size']
         ext_layers = []
         fc_layers = []
 
@@ -72,19 +73,19 @@ class RankNet(nn.Module):
                 init.constant_(m.bias, 0.0)
 
     def forward(self, img1, input1, img2, input2, mask):
-        reshaped_img1 = img1.view(-1, *img1.shape[2:])  # batch, 4, c, h, w => batch * 4, c, h, w
+        reshaped_img1 = img1.view(-1, *img1.shape[2:])  # batch, win_size, c, h, w => batch * win_size, c, h, w
         reshaped_img2 = img2.view(-1, *img2.shape[2:])
         e1, d1 = self.autoencoder(reshaped_img1)
         e2, d2 = self.autoencoder(reshaped_img2)
-        e1 = e1.view(int(e1.shape[0]/4), 4, -1)
-        e2 = e2.view(int(e2.shape[0]/4), 4, -1)
+        e1 = e1.view(int(e1.shape[0]/self.window_size), self.window_size, -1)
+        e2 = e2.view(int(e2.shape[0]/self.window_size), self.window_size, -1)
 
         input1 = torch.cat((input1, e1), dim=2)
         input1 = self.extractor(input1.view(-1, input1.shape[-1]))
-        input1 = input1.view(int(input1.shape[0]/4), 4, -1)
+        input1 = input1.view(int(input1.shape[0]/self.window_size), self.window_size, -1)
         input2 = torch.cat((input2, e2), dim=2)
         input2 = self.extractor(input2.view(-1, input2.shape[-1]))
-        input2 = input2.view(int(input2.shape[0]/4), 4, -1)
+        input2 = input2.view(int(input2.shape[0]/self.window_size), self.window_size, -1)
 
         input1 = self.pos_encoder(input1)
         input2 = self.pos_encoder(input2)
@@ -101,7 +102,7 @@ class RankNet(nn.Module):
             avg_pooled2 = torch.mean(x2, dim=1)
             x1 = self.fc(avg_pooled1)
             x2 = self.fc(avg_pooled2)
-        return torch.log_softmax(x1 - x2, dim=-1), d1, d2
+        return torch.log_softmax(x2 - x1, dim=-1), d1, d2
 
 
 class PositionalEncoding(nn.Module):

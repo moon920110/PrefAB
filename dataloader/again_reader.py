@@ -31,8 +31,12 @@ class AgainReader:
             again = self.again
         again['player_idx'] = pd.factorize(again['player_id'])[0]
 
-        # get arousal diff by frame interval
-        arousal_diff = again.groupby(['player_id', 'game'])['arousal'].diff()
+        # get mean arousal for each 12 frames
+        again['arousal_window_mean'] = again.groupby(['session_id'])['arousal'].transform(lambda x: x.rolling(self.config['train']['window_size'], 1).mean())
+
+        # get arousal diff by 4 frame interval
+        arousal_diff = again.groupby(['session_id'])['arousal_window_mean'].diff(self.config['train']['window_stride'])
+        # arousal_diff = again.groupby(['session_id'])['arousal'].diff()
         # NaN and 0 to 1 negative to 0 positive to 2
         pair_rank_label = arousal_diff.apply(lambda x: 1 if pd.isna(x) or x == 0 else 0 if x < 0 else 2)
 
@@ -61,8 +65,8 @@ class AgainReader:
                 video_full_path = os.path.join(self.data_path, self.config['data']['vision']['frame'], video_name)
 
                 player_data = player_data.sort_values('time_index')
-                pads = pd.concat([player_data.iloc[0]] * 3, axis=1).T
-                player_data = pd.concat([pads, player_data], ignore_index=True)
+                # pads = pd.concat([player_data.iloc[0]] * 3, axis=1).T
+                # player_data = pd.concat([pads, player_data], ignore_index=True)
 
                 x.append([player_data, video_full_path])
 
