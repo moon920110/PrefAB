@@ -1,4 +1,5 @@
 import pandas as pd
+import dtw
 
 from dataloader.again_reader import AgainReader
 
@@ -29,8 +30,20 @@ def calc_correlation(data):
     return corr
 
 
+# TODO: calc dtw, clustering by dtw
+def calc_dtw(data):
+    players = data['player_id'].unique()
+    games = data['game'].unique()
+
+    for player in players:
+        for game in games:
+            player_data = data[(data['player_id'] == player) & (data['game'] == game)]
+            player_data = player_data['arousal'].values
+            dist, cost, acc, path = dtw.dtw(player_data[:, 0], player_data[:, 1], dist=lambda x, y: np.linalg.norm(x - y, ord=1))
+            print(f'{player} - {game}: {dist}')
+
 if __name__ == "__main__":
-    game = 'Heist!'
+    game = 'Shootout'
     print(f'read data {game}')
     again_reader = AgainReader()
     # data = again_reader.game_info_by_name(game)
