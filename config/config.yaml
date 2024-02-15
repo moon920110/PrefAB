@@ -1,6 +1,13 @@
 description: |
   3s (12 frames) of window size and 1s (4 frames) of window stride
   NLL loss, change output to log_softmax(x2 - x1)
+TODO: |
+  network output 쪼개기
+  입력 데이터 쪼개기 -> 앞뒤 시퀀스 뿐 아니라 전체 대상 비교 ?
+  플레이어 bio 데이터 네트워크에 넣기 -> 고정 변수는 다 같이 취급
+  단일 플레이어 대상으로 실험 해보기 -> overfiiting이 되는 지 확인
+  DTW 활용해서 arousal 유형 클러스터링 후 클러스터 별로 학습해보기
+  RankNet 출력 하나로 바꾸고, trainer에서 랭킹을 계산해서 loss 계산하기
 
 data:
   path: /home/jovyan/data/AGAIN
@@ -24,17 +31,17 @@ game_name:
   Endless: endless
 
 train:
-  exp: prefab-3s-1s
+  exp: prefab
   base_transformer_model: Built-in  # Bert, Built-in
   log_dir: log/
   optimizer: adam
   lr: 0.001
-  epoch: 200
+  epoch: 100
   domain: game  # genre, game
   genre: Shooter  # All, Shooter, Platformer, Racing
   game: Heist!
-  num_transform_layers: 8
-  batch_size: 8  # 128
+  num_transform_layers: 1
+  batch_size: 20  # 128
   train_ratio: 0.9
   val_ratio: 0.1
   window_size: 12
@@ -42,11 +49,11 @@ train:
   ae_loss_weight: 0.001
   dropout: 0.1  # 0.5 is trash
   num_workers: 16
-  f_dim: 27666
-  d_model: 4096
+  f_dim: 27612
+  d_model: 128
   schedule: 10
   save_dir: log/model
-  data_balancing: false
+  data_balancing: true
   distributed:
     multi_gpu: true
     num_gpus: 4

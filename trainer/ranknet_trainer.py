@@ -35,6 +35,7 @@ class RanknetTrainer:
             dataset,
             [train_size, val_size, test_size]
         )
+        self.meta_feature_size = dataset.get_meta_feature_size()
 
         # torch.set_float32_matmul_precision('high')
         if config['train']['distributed']['multi_gpu']:
@@ -89,7 +90,7 @@ class RanknetTrainer:
         len_val_loader = len(val_loader) // eval_div if len(val_loader) > eval_div else 1
 
         self.logger.info(f'build model gpu: {rank}')
-        model = RankNet(self.config)
+        model = RankNet(self.config, self.meta_feature_size)
         model.to(self.device)
         ae_criterion = nn.L1Loss().to(self.device)
         rank_criterion = FocalLoss().to(self.device)
@@ -212,7 +213,8 @@ class RanknetTrainer:
             #             os.path.join(self.config['train']['save_dir'],
             #                          f'ranknet{self.config["train"]["exp"]}_{epc}.pth')
             #         )
-        writer.close()
+        if writer is not None:
+            writer.close()
 
     def _metric(self, y_pred, y_true):
         acc = accuracy_score(y_true.cpu().detach().numpy(), y_pred.cpu().detach().numpy().argmax(axis=1))

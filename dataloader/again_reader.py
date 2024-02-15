@@ -36,12 +36,11 @@ class AgainReader:
 
         # get arousal diff by 4 frame interval
         arousal_diff = again.groupby(['session_id'])['arousal_window_mean'].diff(self.config['train']['window_stride'])
-        # arousal_diff = again.groupby(['session_id'])['arousal'].diff()
         # NaN and 0 to 1 negative to 0 positive to 2
         pair_rank_label = arousal_diff.apply(lambda x: 1 if pd.isna(x) or x == 0 else 0 if x < 0 else 2)
 
         again['pair_rank_label'] = pair_rank_label
-        again = again.drop(columns=['arousal'])
+        again = again.drop(columns=['arousal', 'arousal_window_mean'])
 
         return again
 
@@ -73,10 +72,14 @@ class AgainReader:
         return x, numeric_columns
 
     def game_info_by_genre(self, genre):
-        return self.again[self.again['genre'] == genre].dropna(axis=1, how='any')
+        again = self.again[self.again['genre'] == genre].dropna(axis=1, how='any')
+        again = again.loc[:, (again != 0).any(axis=0)]
+        return again
 
     def game_info_by_name(self, game_name):
-        return self.again[self.again['game'] == game_name].dropna(axis=1, how='any')
+        again = self.again[self.again['game'] == game_name].dropna(axis=1, how='any')
+        again = again.loc[:, (again != 0).any(axis=0)]
+        return again
 
     def common_features(self):
         shooter_games = self.game_info_by_genre('Shooter')

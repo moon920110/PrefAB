@@ -50,33 +50,12 @@ class PairLoader(Dataset):
                 img_data = [img_path, seq['time_index'].values, seq['time_stamp'].values]
                 y = seq['pair_rank_label'].values[-1]  # label of the last frame
                 seq = seq.loc[:, self.numeric_columns]
-                seq = seq.drop(columns=['player_idx', 'pair_rank_label', 'epoch', 'engine_tick', 'time_stamp', 'activity', 'score']).values.astype(np.float32)
+                seq = seq.drop(columns=['player_idx', 'pair_rank_label', 'epoch', 'engine_tick', 'time_stamp', 'activity', 'score', 'game_idx']).values.astype(np.float32)
                 # TODO: Add player related information (biography)
 
                 self.x_img_pairs.append(img_data)
                 self.x_meta_pairs.append(seq)
                 self.y.append(y)
-
-    ''' 
-        DEPRECATED
-    '''
-    def init_dataset(self):
-        for x, img_path in tqdm(self.dataset, desc=f'Preparing dataset'):
-            for game in x['game'].unique():
-                for player in x['player_id'].unique():
-                    player_data = x[(x['game'] == game) & (x['player_id'] == player)]
-                    if len(player_data) == 0:
-                        continue
-                    for _, row in player_data.iterrows():
-                        img_data = [img_path, row['time_index'], row['time_stamp']]
-                        y = row['pair_rank_label']
-                        row['game'] = self.config['game_numbering'][self.config['train']['genre']][game]
-                        row = row.loc[self.numeric_columns]
-                        row = row.drop(columns=['pair_rank_label']).astype(np.float32)
-
-                        self.x_img_pairs.append(img_data)
-                        self.x_meta_pairs.append(row)
-                        self.y.append(y)
 
     def __len__(self):
         return len(self.y)
@@ -90,6 +69,9 @@ class PairLoader(Dataset):
         sample_weight = np.array(weight[tmp_y.astype(int)])
 
         return sample_weight
+
+    def get_meta_feature_size(self):
+        return self.x_meta_pairs[0].shape[-1]
 
     def __getitem__(self, idx):
         img_data = self.x_img_pairs[idx]  # images: (0:4) = comparison frames, (1:5) = main frames

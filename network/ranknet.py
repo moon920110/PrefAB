@@ -9,7 +9,7 @@ from network.autoencoder import AutoEncoder
 
 
 class RankNet(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, meta_feature_size):
         super(RankNet, self).__init__()
         self.config = config
         self.window_size = config['train']['window_size']
@@ -27,14 +27,14 @@ class RankNet(nn.Module):
 
         self.autoencoder = AutoEncoder()
 
-        while f_dim > d_model:
+        while f_dim // 2 > d_model:
             ext_layers.append(nn.Linear(f_dim, f_dim//2))
             ext_layers.append(nn.BatchNorm1d(f_dim//2))
             ext_layers.append(nn.LeakyReLU())
             ext_layers.append(nn.Dropout1d(config['train']['dropout']))
             f_dim = f_dim // 2
-        ext_layers.append(nn.Linear(f_dim, d_model))
-        ext_layers.append(nn.BatchNorm1d(d_model))
+        ext_layers.append(nn.Linear(f_dim, d_model - meta_feature_size))
+        ext_layers.append(nn.BatchNorm1d(d_model - meta_feature_size))
         ext_layers.append(nn.LeakyReLU())
         ext_layers.append(nn.Dropout1d(config['train']['dropout']))
         f_dim = d_model
@@ -42,7 +42,7 @@ class RankNet(nn.Module):
         self.extractor = nn.Sequential(*ext_layers)
         self.pos_encoder = PositionalEncoding(d_model, dropout=config['train']['dropout'])
 
-        while f_dim >= 64:
+        while f_dim > 16:
             fc_layers.append(nn.Linear(f_dim, f_dim//2))
             fc_layers.append(nn.BatchNorm1d(f_dim//2))
             fc_layers.append(nn.ReLU())
@@ -80,24 +80,24 @@ class RankNet(nn.Module):
         e1 = e1.view(int(e1.shape[0]/self.window_size), self.window_size, -1)
         e2 = e2.view(int(e2.shape[0]/self.window_size), self.window_size, -1)
 
-        input1 = torch.cat((input1, e1), dim=2)
-        input1 = self.extractor(input1.view(-1, input1.shape[-1]))
-        input1 = input1.view(int(input1.shape[0]/self.window_size), self.window_size, -1)
-        input2 = torch.cat((input2, e2), dim=2)
-        input2 = self.extractor(input2.view(-1, input2.shape[-1]))
-        input2 = input2.view(int(input2.shape[0]/self.window_size), self.window_size, -1)
+        e1_2 = self.extractor(e1.view(-1, e1.shape[-1]))
+        e1_2 = e1_2.view(int(e1_2.shape[0]/self.window_size), self.window_size, -1)
+        e2_2 = self.extractor(e2.view(-1, e2.shape[-1]))
+        e2_2 = e2_2.view(int(e2_2.shape[0]/self.window_size), self.window_size, -1)
 
-        input1 = self.pos_encoder(input1)
-        input2 = self.pos_encoder(input2)
+        e1_3 = torch.cat((e1_2, input1), dim=2)  # batch, sequence, feature
+        e2_3 = torch.cat((e2_2, input2), dim=2)
+        ti1 = self.pos_encoder(e1_3)
+        ti2 = self.pos_encoder(e2_3)
 
         if self.config['train']['base_transformer_model'] == 'Bert':
-            x1 = self.transformer_encoder(inputs_embeds=input1, attention_mask=mask).pooler_output
-            x2 = self.transformer_encoder(inputs_embeds=input2, attention_mask=mask).pooler_output
+            x1 = self.transformer_encoder(inputs_embeds=ti1, attention_mask=mask).pooler_output
+            x2 = self.transformer_encoder(inputs_embeds=ti2, attention_mask=mask).pooler_output
             x1 = self.fc(x1)
             x2 = self.fc(x2)
         else:
-            x1 = self.transformer_encoder(input1)
-            x2 = self.transformer_encoder(input2)
+            x1 = self.transformer_encoder(ti1)
+            x2 = self.transformer_encoder(ti2)
             avg_pooled1 = torch.mean(x1, dim=1)
             avg_pooled2 = torch.mean(x2, dim=1)
             x1 = self.fc(avg_pooled1)
@@ -112,7 +112,7 @@ class PositionalEncoding(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
 
         position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))  # d_model must be even number
         pe = torch.zeros(max_len, d_model)
         pe[:, 0::2] = torch.sin(position * div_term)  # 0::2 means 0, 2, 4, 6, ...
         pe[:, 1::2] = torch.cos(position * div_term)  # 1::2 means 1, 3, 5, 7, ...
