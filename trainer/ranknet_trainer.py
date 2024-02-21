@@ -93,7 +93,7 @@ class RanknetTrainer:
         model = RankNet(self.config, self.meta_feature_size)
         model.to(self.device)
         ae_criterion = nn.L1Loss().to(self.device)
-        rank_criterion = FocalLoss().to(self.device)
+        rank_criterion = nn.MSELoss().to(self.device)  # FocalLoss().to(self.device)
 
         optimizer = torch.optim.Adam(model.parameters(), lr=self.config['train']['lr'])
         # compiled_model = torch.compile(model)
@@ -130,9 +130,14 @@ class RanknetTrainer:
                 l1_cnt += len(label[label == 1])
                 l2_cnt += len(label[label == 2])
 
+                norm_label = label.clone() - 1.0  # * 0.5
+
                 optimizer.zero_grad()
-                o, d1, d2 = model(img1, feature1, img2, feature2, mask)
-                ranknet_loss = rank_criterion(o, label)
+                o1, d1 = model(img1, feature1, mask)
+                o2, d2 = model(img2, feature2, mask)
+                # o = torch.sigmoid(o2 * self.config['train']['output_scale'] - o1 * self.config['train']['output_scale']).squeeze()
+                o = torch.subtract(o2, o1).squeeze()
+                ranknet_loss = rank_criterion(o, norm_label)
                 ae_loss = ae_criterion(d1, img1.view(-1, *img1.shape[2:])) + ae_criterion(d2, img2.view(-1, *img2.shape[2:]))
                 loss = ranknet_loss + ae_loss * self.config['train']['ae_loss_weight']
                 loss.backward()
@@ -180,7 +185,12 @@ class RanknetTrainer:
                     label = label.to(self.device)
                     mask = torch.ones(feature1.shape[0], feature1.shape[1]).to(self.device)
 
-                    o, d1, d2 = model(img1, feature1, img2, feature2, mask)
+                    o1, d1 = model(img1, feature1, mask)
+                    o2, d2 = model(img2, feature2, mask)
+                    # o = torch.sigmoid(
+                    #     o2 * self.config['train']['output_scale'] - o1 * self.config['train']['output_scale']).squeeze()
+                    o = torch.subtract(o2, o1).squeeze()
+                    # print(o, o1, o2)
 
                     acc, cm_tmp = self._metric(o, label)
                     cm += cm_tmp
@@ -217,7 +227,12 @@ class RanknetTrainer:
             writer.close()
 
     def _metric(self, y_pred, y_true):
-        acc = accuracy_score(y_true.cpu().detach().numpy(), y_pred.cpu().detach().numpy().argmax(axis=1))
-        cm = confusion_matrix(y_true.cpu().detach().numpy(), y_pred.cpu().detach().numpy().argmax(axis=1), labels=[0, 1, 2])
+        _y_pred = y_pred.cpu().detach().numpy()
+        # convert _y_pred to 0, 1, 2 where 0 is less than 0.33, 1 is 0.33~0.66, 2 is greater than 0.66
+        _y_pred = np.where(_y_pred < -0.34, 0, np.where(_y_pred < 0.34, 1, 2))
+        # _y_pred = np.where(_y_pred < 0.33, 0, np.where(_y_pred < 0.66, 1, 2))
+
+        acc = accuracy_score(y_true.cpu().detach().numpy(), _y_pred)
+        cm = confusion_matrix(y_true.cpu().detach().numpy(), _y_pred, labels=[0, 1, 2])
 
         return acc, cm

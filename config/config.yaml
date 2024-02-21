@@ -1,13 +1,9 @@
 description: |
-  3s (12 frames) of window size and 1s (4 frames) of window stride
-  NLL loss, change output to log_softmax(x2 - x1)
+  Change output to a single real number with sigmoid
 TODO: |
-  network output 쪼개기
   입력 데이터 쪼개기 -> 앞뒤 시퀀스 뿐 아니라 전체 대상 비교 ?
   플레이어 bio 데이터 네트워크에 넣기 -> 고정 변수는 다 같이 취급
-  단일 플레이어 대상으로 실험 해보기 -> overfiiting이 되는 지 확인
   DTW 활용해서 arousal 유형 클러스터링 후 클러스터 별로 학습해보기
-  RankNet 출력 하나로 바꾸고, trainer에서 랭킹을 계산해서 loss 계산하기
 
 data:
   path: /home/jovyan/data/AGAIN
@@ -31,7 +27,7 @@ game_name:
   Endless: endless
 
 train:
-  exp: prefab
+  exp: prefab-singleout
   base_transformer_model: Built-in  # Bert, Built-in
   log_dir: log/
   optimizer: adam
@@ -47,6 +43,7 @@ train:
   window_size: 12
   window_stride: 4
   ae_loss_weight: 0.001
+  output_scale: 10
   dropout: 0.1  # 0.5 is trash
   num_workers: 16
   f_dim: 27612
@@ -65,7 +62,7 @@ train:
 
 debug:
   activate: false
-  limit_player: true
+  limit_player: false
   data_limit: 20
 
 game_numbering:

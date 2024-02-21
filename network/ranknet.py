@@ -48,7 +48,7 @@ class RankNet(nn.Module):
             fc_layers.append(nn.ReLU())
             fc_layers.append(nn.Dropout(config['train']['dropout']))
             f_dim = f_dim // 2
-        fc_layers.append(nn.Linear(f_dim, 3))
+        fc_layers.append(nn.Linear(f_dim, 1))
 
         self.fc = nn.Sequential(*fc_layers)
 
@@ -72,37 +72,25 @@ class RankNet(nn.Module):
                 init.constant_(m.weight, 1.0)
                 init.constant_(m.bias, 0.0)
 
-    def forward(self, img1, input1, img2, input2, mask):
-        reshaped_img1 = img1.view(-1, *img1.shape[2:])  # batch, win_size, c, h, w => batch * win_size, c, h, w
-        reshaped_img2 = img2.view(-1, *img2.shape[2:])
-        e1, d1 = self.autoencoder(reshaped_img1)
-        e2, d2 = self.autoencoder(reshaped_img2)
-        e1 = e1.view(int(e1.shape[0]/self.window_size), self.window_size, -1)
+    def forward(self, img, feature, mask):
+        reshaped_img = img.view(-1, *img.shape[2:])  # batch, win_size, c, h, w => batch * win_size, c, h, w
+        e, d = self.autoencoder(reshaped_img)
+        e = e.view(int(e.shape[0]/self.window_size), self.window_size, -1)
+
+        e2 = self.extractor(e.view(-1, e.shape[-1]))
         e2 = e2.view(int(e2.shape[0]/self.window_size), self.window_size, -1)
 
-        e1_2 = self.extractor(e1.view(-1, e1.shape[-1]))
-        e1_2 = e1_2.view(int(e1_2.shape[0]/self.window_size), self.window_size, -1)
-        e2_2 = self.extractor(e2.view(-1, e2.shape[-1]))
-        e2_2 = e2_2.view(int(e2_2.shape[0]/self.window_size), self.window_size, -1)
-
-        e1_3 = torch.cat((e1_2, input1), dim=2)  # batch, sequence, feature
-        e2_3 = torch.cat((e2_2, input2), dim=2)
-        ti1 = self.pos_encoder(e1_3)
-        ti2 = self.pos_encoder(e2_3)
+        e3 = torch.cat((e2, feature), dim=2)  # batch, sequence, feature
+        ti = self.pos_encoder(e3)
 
         if self.config['train']['base_transformer_model'] == 'Bert':
-            x1 = self.transformer_encoder(inputs_embeds=ti1, attention_mask=mask).pooler_output
-            x2 = self.transformer_encoder(inputs_embeds=ti2, attention_mask=mask).pooler_output
-            x1 = self.fc(x1)
-            x2 = self.fc(x2)
+            x = self.transformer_encoder(inputs_embeds=ti, attention_mask=mask).pooler_output
+            x = self.fc(x)
         else:
-            x1 = self.transformer_encoder(ti1)
-            x2 = self.transformer_encoder(ti2)
-            avg_pooled1 = torch.mean(x1, dim=1)
-            avg_pooled2 = torch.mean(x2, dim=1)
-            x1 = self.fc(avg_pooled1)
-            x2 = self.fc(avg_pooled2)
-        return torch.log_softmax(x2 - x1, dim=-1), d1, d2
+            x = self.transformer_encoder(ti)
+            avg_pooled = torch.mean(x, dim=1)
+            x = self.fc(avg_pooled)
+        return x, d
 
 
 class PositionalEncoding(nn.Module):
