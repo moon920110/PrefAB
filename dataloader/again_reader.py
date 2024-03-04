@@ -3,6 +3,8 @@ import os
 import pandas as pd
 from tqdm import tqdm
 
+from utils.stats import get_dtw_cluster
+
 
 class AgainReader:
     def __init__(self, config=None, logger=None):
@@ -40,7 +42,22 @@ class AgainReader:
         pair_rank_label = arousal_diff.apply(lambda x: 1 if pd.isna(x) or x == 0 else 0 if x < 0 else 2)
 
         again['pair_rank_label'] = pair_rank_label
-        again = again.drop(columns=['arousal', 'arousal_window_mean'])
+        if self.config['clustering']['activate']:
+            if self.config['clustering']['load_cache']:
+                clusters = pd.read_csv(os.path.join(self.data_path, 'cluster', 'cluster.csv'))
+            else:
+                clusters = get_dtw_cluster(again, self.config)
+                if self.config['clustering']['caching']:
+                    if  os.path.exists(os.path.join(self.data_path, 'cluster')):
+                        os.mkdir(os.path.join(self.data_path, 'cluster'))
+                    clusters.to_csv(os.path.join(self.data_path, 'cluster', 'cluster.csv'), index=False)
+            again['cluster'] = again['session_id'].map(clusters)
+            if self.config['clustering']['cluster_sample'] is not 0:
+                cluster_idx = self.config['clustering']['cluster_sample'] - 1
+                again = again[again['cluster'] == cluster_idx]
+
+        # NOTE: cluster는 추후에 사용할 수 있음
+        again = again.drop(columns=['arousal', 'arousal_window_mean', 'cluster'])
 
         return again
 

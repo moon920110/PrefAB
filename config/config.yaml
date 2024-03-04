@@ -27,11 +27,13 @@ game_name:
   Endless: endless
 
 train:
-  exp: prefab-singleout
+  exp: prefab-singleout-wclassifier
   base_transformer_model: Built-in  # Bert, Built-in
   log_dir: log/
   optimizer: adam
   lr: 0.001
+  focal_alpha: 1
+  focal_gamma: 5
   epoch: 100
   domain: game  # genre, game
   genre: Shooter  # All, Shooter, Platformer, Racing
@@ -59,6 +61,20 @@ train:
     dist_url: tcp://localhost:11111
     backend: nccl
     seed: 1125
+
+clustering:
+  activate: true
+  metric: 'softdtw'  # 'euclidean', 'dtw', 'softdtw
+  input_type: 'arousal_window_mean'  # 'arousal', 'arousal_window_mean'
+  n_clusters: 3
+  metric_params:
+    gamma: 2
+  random_state: 7
+  verbose: true
+  visualize: true
+  cluster_sample: 2  # 0: all, 1~n: cluster index of 0~n-1
+  caching: true
+  load_cache: false
 
 debug:
   activate: false

@@ -7,12 +7,13 @@ import argparse
 import yaml
 import horovod
 
+from dataloader.pair_loader import PairLoader
 from trainer.ranknet_trainer import RanknetTrainer
 from utils.vis import *
 from utils.utils import *
 
 
-def train(config):
+def train(config, dataset):
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -28,8 +29,7 @@ def train(config):
     logger.info(f"Working at {time.strftime('%Y-%m-%d-%H-%M-%S')}")
     logger.info(json.dumps(config, indent=4, sort_keys=False))
 
-
-    trainer = RanknetTrainer(config=config, logger=logger)
+    trainer = RanknetTrainer(dataset, config=config, logger=logger)
     trainer.train()
 
 
@@ -49,9 +49,10 @@ if __name__ == '__main__':
     if not os.path.exists(os.path.join(config['train']['log_dir'], f"{config['train']['exp']}")):
         os.makedirs(os.path.join(config['train']['log_dir'], f"{config['train']['exp']}"))
 
+    dataset = PairLoader(config)
     if config['train']['distributed']['multi_gpu']:
         horovod.run(train,
-                    args=(config,),
+                    args=(config, dataset),
                     np=config['train']['distributed']['num_gpus'])
     else:
-        train(config)
+        train(config, dataset)
