@@ -15,19 +15,17 @@ from torch.utils.data import DataLoader, random_split
 from torch.utils.data.distributed import DistributedSampler
 from sklearn.metrics import confusion_matrix, accuracy_score
 
-from dataloader.pair_loader import PairLoader
 from dataloader.distributedWeightedSampler import DistributedWeightedSampler, WeightedSampler
 from network.ranknet import RankNet
-from network.focalLoss import FocalLoss
+from network.loss import FocalLoss, OrdinalCrossEntropyLoss
 
 
 class RanknetTrainer:
-    def __init__(self, config, logger):
+    def __init__(self, dataset, config, logger):
         self.config = config
         self.logger = logger
         self.window_size = config['train']['window_size']
 
-        dataset = PairLoader(config, logger)
         train_size = int(len(dataset) * config['train']['train_ratio'])
         val_size = int(len(dataset) * config['train']['val_ratio'])
         test_size = len(dataset) - train_size - val_size
@@ -76,13 +74,15 @@ class RanknetTrainer:
                                   sampler=train_sampler,
                                   num_workers=self.config['train']['num_workers'],
                                   shuffle=(train_sampler is None),
-                                  pin_memory=True)
+                                  pin_memory=True,
+                                  drop_last=True)
         val_loader = DataLoader(self.val_dataset,
                                 batch_size=self.config['train']['batch_size'],
                                 sampler=val_sampler,
                                 num_workers=self.config['train']['num_workers'],
                                 shuffle=(val_sampler is None),
-                                pin_memory=True)
+                                pin_memory=True,
+                                drop_last=True)
 
         train_div = self.config['train']['distributed']['num_gpus'] if self.config['train']['distributed']['multi_gpu'] and self.config['train']['data_balancing'] else 1
         eval_div = self.config['train']['distributed']['num_gpus'] if self.config['train']['distributed']['multi_gpu'] else 1
@@ -93,7 +93,7 @@ class RanknetTrainer:
         model = RankNet(self.config, self.meta_feature_size)
         model.to(self.device)
         ae_criterion = nn.L1Loss().to(self.device)
-        rank_criterion = nn.MSELoss().to(self.device)  # FocalLoss().to(self.device)
+        rank_criterion = OrdinalCrossEntropyLoss(self.config['train']['cutpoints']).to(self.device)  # FocalLoss(alpha=self.config['train']['focal_alpha'], gamma=self.config['train']['focal_gamma']).to(self.device)
 
         optimizer = torch.optim.Adam(model.parameters(), lr=self.config['train']['lr'])
         # compiled_model = torch.compile(model)
@@ -130,14 +130,12 @@ class RanknetTrainer:
                 l1_cnt += len(label[label == 1])
                 l2_cnt += len(label[label == 2])
 
-                norm_label = label.clone() - 1.0  # * 0.5
-
                 optimizer.zero_grad()
                 o1, d1 = model(img1, feature1, mask)
                 o2, d2 = model(img2, feature2, mask)
-                # o = torch.sigmoid(o2 * self.config['train']['output_scale'] - o1 * self.config['train']['output_scale']).squeeze()
-                o = torch.subtract(o2, o1).squeeze()
-                ranknet_loss = rank_criterion(o, norm_label)
+                o = o2 - o1
+
+                ranknet_loss = rank_criterion(o, label)
                 ae_loss = ae_criterion(d1, img1.view(-1, *img1.shape[2:])) + ae_criterion(d2, img2.view(-1, *img2.shape[2:]))
                 loss = ranknet_loss + ae_loss * self.config['train']['ae_loss_weight']
                 loss.backward()
@@ -187,10 +185,10 @@ class RanknetTrainer:
 
                     o1, d1 = model(img1, feature1, mask)
                     o2, d2 = model(img2, feature2, mask)
-                    # o = torch.sigmoid(
-                    #     o2 * self.config['train']['output_scale'] - o1 * self.config['train']['output_scale']).squeeze()
-                    o = torch.subtract(o2, o1).squeeze()
-                    # print(o, o1, o2)
+                    o = o2 - o1
+                    if epc > 1:
+                        for oo1, oo2, oo in zip(o1, o2, o):
+                            print(oo1, oo2, oo)
 
                     acc, cm_tmp = self._metric(o, label)
                     cm += cm_tmp
@@ -226,11 +224,11 @@ class RanknetTrainer:
         if writer is not None:
             writer.close()
 
-    def _metric(self, y_pred, y_true):
+    def _metric(self, y_pred, y_true, cutpoints=[-0.3, 0.3]):
         _y_pred = y_pred.cpu().detach().numpy()
         # convert _y_pred to 0, 1, 2 where 0 is less than 0.33, 1 is 0.33~0.66, 2 is greater than 0.66
-        _y_pred = np.where(_y_pred < -0.34, 0, np.where(_y_pred < 0.34, 1, 2))
-        # _y_pred = np.where(_y_pred < 0.33, 0, np.where(_y_pred < 0.66, 1, 2))
+        _y_pred = np.where(_y_pred < cutpoints[0], 0, np.where(_y_pred < cutpoints[1], 1, 2))
+        # _y_pred = y_pred.cpu().detach().numpy().argmax(axis=1)
 
         acc = accuracy_score(y_true.cpu().detach().numpy(), _y_pred)
         cm = confusion_matrix(y_true.cpu().detach().numpy(), _y_pred, labels=[0, 1, 2])

@@ -29,12 +29,12 @@ class RankNet(nn.Module):
 
         while f_dim // 2 > d_model:
             ext_layers.append(nn.Linear(f_dim, f_dim//2))
-            ext_layers.append(nn.BatchNorm1d(f_dim//2))
+            ext_layers.append(nn.LayerNorm(f_dim//2))
             ext_layers.append(nn.LeakyReLU())
             ext_layers.append(nn.Dropout1d(config['train']['dropout']))
             f_dim = f_dim // 2
         ext_layers.append(nn.Linear(f_dim, d_model - meta_feature_size))
-        ext_layers.append(nn.BatchNorm1d(d_model - meta_feature_size))
+        ext_layers.append(nn.LayerNorm(d_model - meta_feature_size))
         ext_layers.append(nn.LeakyReLU())
         ext_layers.append(nn.Dropout1d(config['train']['dropout']))
         f_dim = d_model
@@ -42,9 +42,9 @@ class RankNet(nn.Module):
         self.extractor = nn.Sequential(*ext_layers)
         self.pos_encoder = PositionalEncoding(d_model, dropout=config['train']['dropout'])
 
-        while f_dim > 16:
+        while f_dim > 64:
             fc_layers.append(nn.Linear(f_dim, f_dim//2))
-            fc_layers.append(nn.BatchNorm1d(f_dim//2))
+            fc_layers.append(nn.LayerNorm(f_dim//2))
             fc_layers.append(nn.ReLU())
             fc_layers.append(nn.Dropout(config['train']['dropout']))
             f_dim = f_dim // 2
@@ -58,10 +58,10 @@ class RankNet(nn.Module):
     def _init_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Linear):
-                if m is self.fc:
-                    init.xavier_normal_(m.weight)
-                else:
-                    init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                # if m is self.fc:
+                #     init.xavier_normal_(m.weight)
+                # else:
+                init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
                 if m.bias is not None:
                     init.constant_(m.bias, 0.0)
             elif isinstance(m, nn.Conv2d):

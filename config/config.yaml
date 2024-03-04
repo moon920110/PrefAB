@@ -53,6 +53,7 @@ train:
   schedule: 10
   save_dir: log/model
   data_balancing: true
+  cutpoints: [-0.3, 0.3]
   distributed:
     multi_gpu: true
     num_gpus: 4
