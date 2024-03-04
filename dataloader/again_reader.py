@@ -48,10 +48,11 @@ class AgainReader:
             else:
                 clusters = get_dtw_cluster(again, self.config)
                 if self.config['clustering']['caching']:
-                    if  os.path.exists(os.path.join(self.data_path, 'cluster')):
+                    if not os.path.exists(os.path.join(self.data_path, 'cluster')):
                         os.mkdir(os.path.join(self.data_path, 'cluster'))
+                    clusters = pd.DataFrame(clusters.items(), columns=['session_id', 'cluster'])
                     clusters.to_csv(os.path.join(self.data_path, 'cluster', 'cluster.csv'), index=False)
-            again['cluster'] = again['session_id'].map(clusters)
+            again['cluster'] = again['session_id'].map(clusters.set_index('session_id')['cluster'])
             if self.config['clustering']['cluster_sample'] is not 0:
                 cluster_idx = self.config['clustering']['cluster_sample'] - 1
                 again = again[again['cluster'] == cluster_idx]
