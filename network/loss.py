@@ -51,4 +51,4 @@ class OrdinalCrossEntropyLoss(nn.Module):
             loss_1 = -torch.log(y_pred_1[y_true_1])
             loss_2 = -torch.log(y_pred_2[y_true_2])
 
-        return loss_0 + loss_1 + loss_2
+        return (loss_0 + loss_1 + loss_2)/3

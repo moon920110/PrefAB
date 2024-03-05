@@ -141,7 +141,7 @@ class RanknetTrainer:
                 loss.backward()
                 optimizer.step()
                 scheduler.step()
-                acc, cm_tmp = self._metric(o, label)
+                acc, cm_tmp = self._metric(o, label, self.config['train']['cutpoints'])
                 cm += cm_tmp
 
                 if writer:
@@ -186,11 +186,11 @@ class RanknetTrainer:
                     o1, d1 = model(img1, feature1, mask)
                     o2, d2 = model(img2, feature2, mask)
                     o = o2 - o1
-                    if epc > 1:
-                        for oo1, oo2, oo in zip(o1, o2, o):
-                            print(oo1, oo2, oo)
+                    # if epc > 5:
+                    #     for oo1, oo2, oo in zip(o1, o2, o):
+                    #         print(oo1, oo2, oo)
 
-                    acc, cm_tmp = self._metric(o, label)
+                    acc, cm_tmp = self._metric(o, label, self.config['train']['cutpoints'])
                     cm += cm_tmp
                     accs += acc
                     if writer:
@@ -224,7 +224,7 @@ class RanknetTrainer:
         if writer is not None:
             writer.close()
 
-    def _metric(self, y_pred, y_true, cutpoints=[-0.3, 0.3]):
+    def _metric(self, y_pred, y_true, cutpoints=[-3, 3]):
         _y_pred = y_pred.cpu().detach().numpy()
         # convert _y_pred to 0, 1, 2 where 0 is less than 0.33, 1 is 0.33~0.66, 2 is greater than 0.66
         _y_pred = np.where(_y_pred < cutpoints[0], 0, np.where(_y_pred < cutpoints[1], 1, 2))

@@ -31,12 +31,12 @@ class RankNet(nn.Module):
             ext_layers.append(nn.Linear(f_dim, f_dim//2))
             ext_layers.append(nn.LayerNorm(f_dim//2))
             ext_layers.append(nn.LeakyReLU())
-            ext_layers.append(nn.Dropout1d(config['train']['dropout']))
+            # ext_layers.append(nn.Dropout1d(config['train']['dropout']))
             f_dim = f_dim // 2
         ext_layers.append(nn.Linear(f_dim, d_model - meta_feature_size))
         ext_layers.append(nn.LayerNorm(d_model - meta_feature_size))
         ext_layers.append(nn.LeakyReLU())
-        ext_layers.append(nn.Dropout1d(config['train']['dropout']))
+        # ext_layers.append(nn.Dropout1d(config['train']['dropout']))
         f_dim = d_model
 
         self.extractor = nn.Sequential(*ext_layers)
@@ -46,7 +46,7 @@ class RankNet(nn.Module):
             fc_layers.append(nn.Linear(f_dim, f_dim//2))
             fc_layers.append(nn.LayerNorm(f_dim//2))
             fc_layers.append(nn.ReLU())
-            fc_layers.append(nn.Dropout(config['train']['dropout']))
+            # fc_layers.append(nn.Dropout(config['train']['dropout']))
             f_dim = f_dim // 2
         fc_layers.append(nn.Linear(f_dim, 1))
 
@@ -80,7 +80,7 @@ class RankNet(nn.Module):
         e2 = self.extractor(e.view(-1, e.shape[-1]))
         e2 = e2.view(int(e2.shape[0]/self.window_size), self.window_size, -1)
 
-        e3 = torch.cat((e2, feature), dim=2)  # batch, sequence, feature
+        e3 = torch.cat((e2, feature), dim=-1)  # batch, sequence, feature
         ti = self.pos_encoder(e3)
 
         if self.config['train']['base_transformer_model'] == 'Bert':

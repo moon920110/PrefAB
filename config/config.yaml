@@ -27,7 +27,7 @@ game_name:
   Endless: endless
 
 train:
-  exp: prefab-singleout-wclassifier
+  exp: prefab
   base_transformer_model: Built-in  # Bert, Built-in
   log_dir: log/
   optimizer: adam
@@ -46,14 +46,14 @@ train:
   window_stride: 4
   ae_loss_weight: 0.001
   output_scale: 10
-  dropout: 0.1  # 0.5 is trash
+  dropout: 0.2  # 0.5 is trash
   num_workers: 16
   f_dim: 27612
-  d_model: 128
+  d_model: 200
   schedule: 10
   save_dir: log/model
   data_balancing: true
-  cutpoints: [-0.3, 0.3]
+  cutpoints: [-1, 1]
   distributed:
     multi_gpu: true
     num_gpus: 4
@@ -72,10 +72,10 @@ clustering:
     gamma: 2
   random_state: 7
   verbose: true
-  visualize: true
-  cluster_sample: 2  # 0: all, 1~n: cluster index of 0~n-1
-  caching: true
-  load_cache: false
+  visualize: false
+  cluster_sample: 0  # 0: all, 1~n: cluster index of 0~n-1
+  caching: false
+  load_cache: true
 
 debug:
   activate: false
