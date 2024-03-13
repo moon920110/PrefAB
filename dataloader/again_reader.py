@@ -53,12 +53,12 @@ class AgainReader:
                     clusters = pd.DataFrame(clusters.items(), columns=['session_id', 'cluster'])
                     clusters.to_csv(os.path.join(self.data_path, 'cluster', 'cluster.csv'), index=False)
             again['cluster'] = again['session_id'].map(clusters.set_index('session_id')['cluster'])
-            if self.config['clustering']['cluster_sample'] is not 0:
+            if self.config['clustering']['cluster_sample'] != 0:
                 cluster_idx = self.config['clustering']['cluster_sample'] - 1
                 again = again[again['cluster'] == cluster_idx]
 
-        # NOTE: cluster는 추후에 사용할 수 있음
-        again = again.drop(columns=['arousal', 'arousal_window_mean', 'cluster'])
+            # NOTE: cluster는 추후에 사용할 수 있음
+            again = again.drop(columns=['arousal', 'arousal_window_mean', 'cluster'])
 
         return again
 
@@ -71,7 +71,7 @@ class AgainReader:
         pbar = tqdm(total=total_iter, desc='Preparing sequential dataset')
         numeric_columns = data.select_dtypes(include=['number']).columns
 
-        # a game log for each player
+        # a game log for each player: one session
         for game in data['game'].unique():
             for player in data['player_id'].unique():
                 pbar.update(1)

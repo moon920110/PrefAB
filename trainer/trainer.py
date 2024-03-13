@@ -11,14 +11,14 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader, random_split
 from torch.utils.data.distributed import DistributedSampler
 
-from dataloader.pair_loader import PairLoader
+from dataloader.dataset import PairDataset
 
 
 class Trainer:
     def __init__(self, config):
         self.config = config
 
-        dataset = PairLoader(config)
+        dataset = PairDataset(config)
         train_size = int(len(dataset) * config['train']['train_ratio'])
         val_size = int(len(dataset) * config['train']['val_ratio'])
         test_size = len(dataset) - train_size - val_size

@@ -21,7 +21,7 @@ from network.loss import FocalLoss, OrdinalCrossEntropyLoss
 
 
 class RanknetTrainer:
-    def __init__(self, dataset, config, logger):
+    def __init__(self, dataset, testset, config, logger):
         self.config = config
         self.logger = logger
         self.window_size = config['train']['window_size']
@@ -34,6 +34,7 @@ class RanknetTrainer:
             [train_size, val_size, test_size]
         )
         self.meta_feature_size = dataset.get_meta_feature_size()
+        self.testset = testset
 
         # torch.set_float32_matmul_precision('high')
         if config['train']['distributed']['multi_gpu']:
@@ -196,6 +197,7 @@ class RanknetTrainer:
                     if writer:
                         writer.add_scalar(f'val/accuracy', acc, epc * len_val_loader + i)
 
+                avg_acc = accs / len_val_loader
                 if writer:
                     if d1 is not None and d2 is not None:
                         out_for_saving1 = d1.view(int(d1.shape[0] / self.window_size), self.window_size, *d1.shape[1:])[-1]
@@ -203,34 +205,70 @@ class RanknetTrainer:
                     writer.add_images(f'val/epc_{epc}_output_1', out_for_saving1, epc, dataformats='NCHW')
                     writer.add_images(f'val/epc_{epc}_output_2', out_for_saving2, epc, dataformats='NCHW')
 
-                    self.logger.info(f'[gpu:{rank}]epoch {epc} avg. val acc {accs / len_val_loader:.4f}')
+                    self.logger.info(f'[gpu:{rank}]epoch {epc} avg. val acc {avg_acc:.4f}')
                     cm = pd.DataFrame(cm, index=['dec', 'same', 'inc'], columns=['dec', 'same', 'inc'])
                     plt.figure(figsize=(30, 30))
                     sns.heatmap(cm, annot=True, cmap='Blues')
                     writer.add_figure(f'val/confusion_matrix_{rank} epc_{epc}', plt.gcf())
 
-                if (accs / len_val_loader) > best_acc:
+                if avg_acc > best_acc:
                     prev_best = best_acc
-                    best_acc = accs / len_val_loader
+                    best_acc = avg_acc
+
+                self._validate_per_player(model, 5, writer, epc)
 
             # model save if validation accuracy is the best
-            # if rank == 0:
-            #     if prev_best < best_acc:
-            #         torch.save(
-            #             model.state_dict(),
-            #             os.path.join(self.config['train']['save_dir'],
-            #                          f'ranknet{self.config["train"]["exp"]}_{epc}.pth')
-            #         )
+            if rank == 0:
+                if avg_acc == best_acc and avg_acc > 75.:
+                    torch.save(
+                        model.state_dict(),
+                        os.path.join(self.config['train']['save_dir'],
+                                     f'ranknet_{self.config["train"]["exp"]}_{epc}.pth')
+                    )
         if writer is not None:
             writer.close()
 
-    def _metric(self, y_pred, y_true, cutpoints=[-3, 3]):
+    def _metric(self, y_pred, y_true, cutpoints):
         _y_pred = y_pred.cpu().detach().numpy()
-        # convert _y_pred to 0, 1, 2 where 0 is less than 0.33, 1 is 0.33~0.66, 2 is greater than 0.66
         _y_pred = np.where(_y_pred < cutpoints[0], 0, np.where(_y_pred < cutpoints[1], 1, 2))
-        # _y_pred = y_pred.cpu().detach().numpy().argmax(axis=1)
 
         acc = accuracy_score(y_true.cpu().detach().numpy(), _y_pred)
         cm = confusion_matrix(y_true.cpu().detach().numpy(), _y_pred, labels=[0, 1, 2])
 
         return acc, cm
+
+    def _validate_per_player(self, model, size, writer, epc):
+        indices = self.testset.sample_player_data(size)
+        for i, idx in enumerate(indices):
+            start_idx = self.testset.player_idx[idx]
+            end_idx = self.testset.player_idx[idx + 1]
+
+            outputs = []
+            ys = []
+            rys = []
+            mys = []
+            for data_idx in range(start_idx, end_idx):
+                img, feature, y, r_y, m_y = self.testset[data_idx]
+                img = img.unsqueeze(0).to(self.device)
+                feature = feature.unsqueeze(0).to(self.device)
+                mask = torch.ones(feature.shape[0], feature.shape[1]).to(self.device)
+
+                o, _ = model(img, feature, mask)
+
+                outputs.append(o.cpu().detach().numpy())
+                ys.append(y)
+                rys.append(r_y * 0.5)
+                mys.append(m_y)
+
+            # normalize output to 0~1
+            outputs = np.array(outputs)
+            outputs = (outputs - outputs.min()) / (outputs.max() - outputs.min())
+
+            for ii, (o, y, r_y, m_y) in enumerate(zip(outputs, ys, rys, mys)):
+                if writer:
+                    writer.add_scalars(f'test/epc{epc}_player_{idx}',
+                                       {'predict': o,
+                                        'arousal': y,
+                                        'relative_arousal': r_y,
+                                        'mean_arousal': m_y},
+                                       ii)

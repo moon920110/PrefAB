@@ -1,16 +1,14 @@
 description: |
   Change output to a single real number with sigmoid
 TODO: |
-  입력 데이터 쪼개기 -> 앞뒤 시퀀스 뿐 아니라 전체 대상 비교 ?
-  플레이어 bio 데이터 네트워크에 넣기 -> 고정 변수는 다 같이 취급
-  DTW 활용해서 arousal 유형 클러스터링 후 클러스터 별로 학습해보기
+  testset을 session 단위로 load해서 전체 sequence를 예측한 뒤 groundtruth와 비교해볼 것
+  배우지 않은 게임에 대해서는 얼마나 잘 하는지?
 
 data:
   path: /home/jovyan/data/AGAIN
   vision:
     video: videos_mp4
     frame: frame_data
-  sequential: true
   img_mean: [ 0.485, 0.456, 0.406 ]
   img_std: [ 0.229, 0.224, 0.225 ]
   transform_size: [320, 480]
@@ -27,7 +25,7 @@ game_name:
   Endless: endless
 
 train:
-  exp: prefab
+  exp: prefab-shootout
   base_transformer_model: Built-in  # Bert, Built-in
   log_dir: log/
   optimizer: adam
@@ -37,11 +35,11 @@ train:
   epoch: 100
   domain: game  # genre, game
   genre: Shooter  # All, Shooter, Platformer, Racing
-  game: Heist!
+  game: Shootout
   num_transform_layers: 1
   batch_size: 20  # 128
-  train_ratio: 0.9
-  val_ratio: 0.1
+  train_ratio: 0.7
+  val_ratio: 0.3
   window_size: 12
   window_stride: 4
   ae_loss_weight: 0.001
@@ -64,7 +62,7 @@ train:
     seed: 1125
 
 clustering:
-  activate: true
+  activate: false
   metric: 'softdtw'  # 'euclidean', 'dtw', 'softdtw
   input_type: 'arousal_window_mean'  # 'arousal', 'arousal_window_mean'
   n_clusters: 3
