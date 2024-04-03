@@ -215,7 +215,7 @@ class RanknetTrainer:
                     prev_best = best_acc
                     best_acc = avg_acc
 
-                self._validate_per_player(model, 5, writer, epc)
+                self._validate_per_player(model, 5, writer, epc, self.config['train']['cutpoints'])
 
             # model save if validation accuracy is the best
             if rank == 0:
@@ -237,16 +237,17 @@ class RanknetTrainer:
 
         return acc, cm
 
-    def _validate_per_player(self, model, size, writer, epc):
+    def _validate_per_player(self, model, size, writer, epc, cutpoints):
         indices = self.testset.sample_player_data(size)
         for i, idx in enumerate(indices):
             start_idx = self.testset.player_idx[idx]
             end_idx = self.testset.player_idx[idx + 1]
 
             outputs = []
-            ys = []
-            rys = []
-            mys = []
+            ordinal_outputs = []
+            labels = []
+            relative_labels = []
+            mean_labels = []
             for data_idx in range(start_idx, end_idx):
                 img, feature, y, r_y, m_y = self.testset[data_idx]
                 img = img.unsqueeze(0).to(self.device)
@@ -256,18 +257,31 @@ class RanknetTrainer:
                 o, _ = model(img, feature, mask)
 
                 outputs.append(o.cpu().detach().numpy())
-                ys.append(y)
-                rys.append(r_y * 0.5)
-                mys.append(m_y)
+                labels.append(y)
+                relative_labels.append(r_y * 0.5)
+                mean_labels.append(m_y)
+                if len(ordinal_outputs) == 0:
+                    ordinal_outputs.append(0)
+                else:
+                    diff = o.cpu().detach().numpy() - ordinal_outputs[-1]
+                    if diff < cutpoints[0]:
+                        ordinal_outputs.append(ordinal_outputs[-1] - 1)
+                    elif diff < cutpoints[1]:
+                        ordinal_outputs.append(ordinal_outputs[-1])
+                    else:
+                        ordinal_outputs.append(ordinal_outputs[-1] + 1)
 
             # normalize output to 0~1
             outputs = np.array(outputs)
             outputs = (outputs - outputs.min()) / (outputs.max() - outputs.min())
+            ordinal_outputs = np.array(ordinal_outputs)
+            ordinal_outputs = (ordinal_outputs - ordinal_outputs.min()) / (ordinal_outputs.max() - ordinal_outputs.min())
 
-            for ii, (o, y, r_y, m_y) in enumerate(zip(outputs, ys, rys, mys)):
+            for ii, (o, oo, y, r_y, m_y) in enumerate(zip(outputs, ordinal_outputs, labels, relative_labels, mean_labels)):
                 if writer:
                     writer.add_scalars(f'test/epc{epc}_player_{idx}',
                                        {'predict': o,
+                                        'ordinal_predict': oo,
                                         'arousal': y,
                                         'relative_arousal': r_y,
                                         'mean_arousal': m_y},
