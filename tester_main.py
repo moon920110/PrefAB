@@ -18,7 +18,7 @@ if __name__ == '__main__':
     for i, session in enumerate(sessions):
         print(f'session: {session}')
         session_data = data[data['session_id'] == session]
-        find_significant_peaks_and_valleys(session_data['arousal'].values)
+        find_significant_peaks_and_valleys(session_data['arousal'].values, threshold=0.5)
 
         if i > 20:
             break
