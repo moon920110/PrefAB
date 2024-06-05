@@ -22,6 +22,7 @@ class FocalLoss(nn.Module):
             return loss
 
 
+# inspired by https://www.ethanrosenthal.com/2018/12/06/spacecutter-ordinal-regression/
 class OrdinalCrossEntropyLoss(nn.Module):
     def __init__(self, cutpoints, reduction='mean'):
         super(OrdinalCrossEntropyLoss, self).__init__()

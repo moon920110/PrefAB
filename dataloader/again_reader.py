@@ -58,7 +58,7 @@ class AgainReader:
                 again = again[again['cluster'] == cluster_idx]
 
             # NOTE: cluster는 추후에 사용할 수 있음
-            again = again.drop(columns=['arousal', 'arousal_window_mean', 'cluster'])
+            again = again.drop(columns=['cluster'])
 
         return again
 

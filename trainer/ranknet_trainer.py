@@ -1,5 +1,6 @@
 import os
 import time
+import json
 
 import torch
 import pandas as pd
@@ -16,7 +17,7 @@ from torch.utils.data.distributed import DistributedSampler
 from sklearn.metrics import confusion_matrix, accuracy_score
 
 from dataloader.distributedWeightedSampler import DistributedWeightedSampler, WeightedSampler
-from network.ranknet import RankNet
+from network.prefab import Prefab
 from network.loss import FocalLoss, OrdinalCrossEntropyLoss
 
 
@@ -55,11 +56,17 @@ class RanknetTrainer:
             rank = hvd.rank()
             train_sampler = DistributedWeightedSampler(self.train_dataset, num_replicas=hvd.size(), rank=rank) if self.config['train']['data_balancing'] else DistributedSampler(self.train_dataset, num_replicas=hvd.size(), rank=rank)
             val_sampler = DistributedWeightedSampler(self.val_dataset, num_replicas=hvd.size(), rank=rank)  #  if self.config['train']['data_balancing'] else DistributedSampler(self.val_dataset, num_replicas=hvd.size(), rank=rank)
-            writer = SummaryWriter(
-                log_dir=os.path.join(self.config['train']['log_dir'],
-                                     f"{self.config['train']['exp']}"
-                                     )
-            ) if rank == 0 else None
+
+            if rank == 0:
+                writer = SummaryWriter(
+                    log_dir=os.path.join(self.config['train']['log_dir'],
+                                         f"{self.config['train']['exp']}"
+                                         )
+                )
+                self.logger.info(f"Working at {time.strftime('%Y-%m-%d-%H-%M-%S')}")
+                self.logger.info(json.dumps(self.config, indent=4, sort_keys=False))
+            else:
+                writer = None
         else:
             writer = SummaryWriter(
                 log_dir=os.path.join(self.config['train']['log_dir'],
@@ -91,7 +98,7 @@ class RanknetTrainer:
         len_val_loader = len(val_loader) // eval_div if len(val_loader) > eval_div else 1
 
         self.logger.info(f'build model gpu: {rank}')
-        model = RankNet(self.config, self.meta_feature_size)
+        model = Prefab(self.config, self.meta_feature_size)
         model.to(self.device)
         ae_criterion = nn.L1Loss().to(self.device)
         rank_criterion = OrdinalCrossEntropyLoss(self.config['train']['cutpoints']).to(self.device)  # FocalLoss(alpha=self.config['train']['focal_alpha'], gamma=self.config['train']['focal_gamma']).to(self.device)
@@ -105,7 +112,7 @@ class RanknetTrainer:
         scheduler = lr_scheduler.StepLR(optimizer, step_size=len_train_loader * self.config['train']['schedule'], gamma=0.1)
 
         best_acc = 0
-        prev_best = 0
+
         for epc in range(self.config['train']['epoch']):
             losses = 0
             d1, d2 = None, None
@@ -125,15 +132,14 @@ class RanknetTrainer:
                 img2 = img2.to(self.device)
                 feature2 = feature2.to(self.device)
                 label = label.to(self.device)
-                mask = torch.ones(feature1.shape[0], feature1.shape[1]).to(self.device)
 
                 l0_cnt += len(label[label == 0])
                 l1_cnt += len(label[label == 1])
                 l2_cnt += len(label[label == 2])
 
                 optimizer.zero_grad()
-                o1, d1 = model(img1, feature1, mask)
-                o2, d2 = model(img2, feature2, mask)
+                o1, d1 = model(img1, feature1)
+                o2, d2 = model(img2, feature2)
                 o = o2 - o1
 
                 ranknet_loss = rank_criterion(o, label)
@@ -182,10 +188,9 @@ class RanknetTrainer:
                     img2 = img2.to(self.device)
                     feature2 = feature2.to(self.device)
                     label = label.to(self.device)
-                    mask = torch.ones(feature1.shape[0], feature1.shape[1]).to(self.device)
 
-                    o1, d1 = model(img1, feature1, mask)
-                    o2, d2 = model(img2, feature2, mask)
+                    o1, d1 = model(img1, feature1)
+                    o2, d2 = model(img2, feature2)
                     o = o2 - o1
                     # if epc > 5:
                     #     for oo1, oo2, oo in zip(o1, o2, o):
@@ -211,19 +216,16 @@ class RanknetTrainer:
                     sns.heatmap(cm, annot=True, cmap='Blues')
                     writer.add_figure(f'val/confusion_matrix_{rank} epc_{epc}', plt.gcf())
 
-                if avg_acc > best_acc:
-                    prev_best = best_acc
-                    best_acc = avg_acc
-
-                self._validate_per_player(model, 5, writer, epc, self.config['train']['cutpoints'])
 
             # model save if validation accuracy is the best
             if rank == 0:
-                if avg_acc == best_acc and avg_acc > 75.:
+                if avg_acc > best_acc and avg_acc > 0.70:
+                    self._validate_per_player(model, 5, writer, epc, self.config['train']['cutpoints'])
+                    best_acc = avg_acc
                     torch.save(
                         model.state_dict(),
                         os.path.join(self.config['train']['save_dir'],
-                                     f'ranknet_{self.config["train"]["exp"]}_{epc}.pth')
+                                     f'ranknet_{self.config["train"]["exp"]}_{epc}_{avg_acc*100:.2f}.pth')
                     )
         if writer is not None:
             writer.close()
@@ -252,9 +254,8 @@ class RanknetTrainer:
                 img, feature, y, r_y, m_y = self.testset[data_idx]
                 img = img.unsqueeze(0).to(self.device)
                 feature = feature.unsqueeze(0).to(self.device)
-                mask = torch.ones(feature.shape[0], feature.shape[1]).to(self.device)
 
-                o, _ = model(img, feature, mask)
+                o, _ = model(img, feature)
 
                 outputs.append(o.cpu().detach().numpy())
                 labels.append(y)

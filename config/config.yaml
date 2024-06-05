@@ -1,8 +1,7 @@
 description: |
   Change output to a single real number with sigmoid
 TODO: |
-  testset을 session 단위로 load해서 전체 sequence를 예측한 뒤 groundtruth와 비교해볼 것
-  배우지 않은 게임에 대해서는 얼마나 잘 하는지?
+  배우지 않은 게임에 대해서는 얼마나 잘 하는지? -> 입력 feature가 달라서 안됨
 
 data:
   path: /home/jovyan/data/AGAIN
@@ -26,7 +25,6 @@ game_name:
 
 train:
   exp: prefab-shootout
-  base_transformer_model: Built-in  # Bert, Built-in
   log_dir: log/
   optimizer: adam
   lr: 0.001
@@ -37,14 +35,14 @@ train:
   genre: Shooter  # All, Shooter, Platformer, Racing
   game: Shootout
   num_transform_layers: 1
-  batch_size: 20  # 128
+  batch_size: 24  # A100 (40G): 24, V100 (32G): 16
   train_ratio: 0.7
   val_ratio: 0.3
   window_size: 12
   window_stride: 4
   ae_loss_weight: 0.001
   output_scale: 10
-  dropout: 0.2  # 0.5 is trash
+  dropout: 0.1  # 0.5 is trash
   num_workers: 16
   f_dim: 27612
   d_model: 200
@@ -71,7 +69,7 @@ clustering:
   random_state: 7
   verbose: true
   visualize: false
-  cluster_sample: 0  # 0: all, 1~n: cluster index of 0~n-1
+  cluster_sample: 2  # 0: all, 1~n: cluster index of 0~n-1
   caching: false
   load_cache: true
 

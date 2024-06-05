@@ -1,6 +1,4 @@
 import os
-import time
-import json
 
 import logging
 import argparse
@@ -25,9 +23,6 @@ def train(config, dataset, testset):
     fh = logging.FileHandler(os.path.join(config['train']['log_dir'], f"{config['train']['exp']}", 'log.log'))
     fh.setFormatter(formatter)
     logger.addHandler(fh)
-
-    logger.info(f"Working at {time.strftime('%Y-%m-%d-%H-%M-%S')}")
-    logger.info(json.dumps(config, indent=4, sort_keys=False))
 
     trainer = RanknetTrainer(dataset, testset, config=config, logger=logger)
     trainer.train()

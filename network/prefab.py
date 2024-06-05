@@ -3,27 +3,23 @@ import torch
 import torch.nn.init as init
 from torch import nn
 from torch.nn.modules.transformer import TransformerEncoder, TransformerEncoderLayer
-from transformers import AutoModel
 
 from network.autoencoder import AutoEncoder
 
 
-class RankNet(nn.Module):
+class Prefab(nn.Module):
     def __init__(self, config, meta_feature_size):
-        super(RankNet, self).__init__()
+        super(Prefab, self).__init__()
         self.config = config
         self.window_size = config['train']['window_size']
         ext_layers = []
         fc_layers = []
 
         f_dim = config['train']['f_dim']
-        if config['train']['base_transformer_model'] == 'Bert':
-            self.transformer_encoder = AutoModel.from_pretrained('bert-base-uncased')
-            d_model = self.transformer_encoder.config.hidden_size
-        else:
-            d_model = config['train']['d_model']
-            encoder_layers = TransformerEncoderLayer(d_model=d_model, nhead=8, dropout=config['train']['dropout'], batch_first=True)
-            self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers=self.config['train']['num_transform_layers'])
+
+        d_model = config['train']['d_model']
+        encoder_layers = TransformerEncoderLayer(d_model=d_model, nhead=8, dropout=config['train']['dropout'], batch_first=True)
+        self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers=self.config['train']['num_transform_layers'])
 
         self.autoencoder = AutoEncoder()
 
@@ -52,8 +48,7 @@ class RankNet(nn.Module):
 
         self.fc = nn.Sequential(*fc_layers)
 
-        if config['train']['base_transformer_model'] == 'Built-in':
-            self._init_weights()
+        self._init_weights()
 
     def _init_weights(self):
         for m in self.modules():
@@ -72,7 +67,7 @@ class RankNet(nn.Module):
                 init.constant_(m.weight, 1.0)
                 init.constant_(m.bias, 0.0)
 
-    def forward(self, img, feature, mask):
+    def forward(self, img, feature):
         reshaped_img = img.view(-1, *img.shape[2:])  # batch, win_size, c, h, w => batch * win_size, c, h, w
         e, d = self.autoencoder(reshaped_img)
         e = e.view(int(e.shape[0]/self.window_size), self.window_size, -1)
@@ -83,13 +78,10 @@ class RankNet(nn.Module):
         e3 = torch.cat((e2, feature), dim=-1)  # batch, sequence, feature
         ti = self.pos_encoder(e3)
 
-        if self.config['train']['base_transformer_model'] == 'Bert':
-            x = self.transformer_encoder(inputs_embeds=ti, attention_mask=mask).pooler_output
-            x = self.fc(x)
-        else:
-            x = self.transformer_encoder(ti)
-            avg_pooled = torch.mean(x, dim=1)
-            x = self.fc(avg_pooled)
+        x = self.transformer_encoder(ti)
+        avg_pooled = torch.mean(x, dim=1)
+        x = self.fc(avg_pooled)
+
         return x, d
 
 
