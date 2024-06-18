@@ -24,16 +24,17 @@ game_name:
   Endless: endless
 
 train:
-  exp: prefab-shootout
+  exp: prefab-topdown
   log_dir: log/
-  optimizer: adam
+  save_dir: log/model
+  mode: prefab  # prefab: full; image: only image; feature: only feature; non_ordinal: non-ordinal
+  domain: game  # genre, game
+  genre: Shooter  # All, Shooter, Platformer, Racing
+  game: TopDown
   lr: 0.001
   focal_alpha: 1
   focal_gamma: 5
-  epoch: 100
-  domain: game  # genre, game
-  genre: Shooter  # All, Shooter, Platformer, Racing
-  game: Shootout
+  epoch: 60
   num_transform_layers: 1
   batch_size: 24  # A100 (40G): 24, V100 (32G): 16
   train_ratio: 0.7
@@ -47,7 +48,6 @@ train:
   f_dim: 27612
   d_model: 200
   schedule: 10
-  save_dir: log/model
   data_balancing: true
   cutpoints: [-1, 1]
   distributed:

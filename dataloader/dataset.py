@@ -41,17 +41,34 @@ class PairDataset(Dataset):
                 if player_data['player_idx'].unique()[0] != 0:
                     continue
 
-            for idx in range(0, len(player_data)-offset+1):
-                seq = player_data.iloc[idx:idx+offset]  # stack `window_size` frames (0~win_size-1), (4~win_size+win_stride) pair
-                img_data = [img_path, seq['time_index'].values, seq['time_stamp'].values]
-                y = seq['pair_rank_label'].values[-1]  # label of the last frame
-                seq = seq.loc[:, self.numeric_columns]
-                seq = seq.drop(columns=['player_idx', 'pair_rank_label', 'epoch', 'engine_tick', 'time_stamp', 'activity', 'score', 'game_idx', 'arousal', 'arousal_window_mean']).values.astype(np.float32)
-                # TODO: Add player related information (biography)
+            if self.config['train']['mode'] == 'non_ordinal':
+                for idx in range(0, len(player_data)-self.window_size):
+                    seq = player_data.iloc[idx:idx+self.window_size]  # stack `window_size` frames (0~win_size-1)
+                    img_data = [img_path, seq['time_index'].values, seq['time_stamp'].values]
+                    y = seq['arousal'].values[-1].astype('float32')  # label of the last frame
 
-                self.x_img_pairs.append(img_data)
-                self.x_meta_pairs.append(seq)
-                self.y.append(y)
+                    seq = seq.loc[:, self.numeric_columns]
+                    seq = seq.drop(
+                        columns=['player_idx', 'pair_rank_label', 'epoch', 'engine_tick', 'time_stamp', 'activity',
+                                 'score', 'game_idx', 'arousal', 'arousal_window_mean']).values.astype(np.float32)
+                    self.x_img_pairs.append(img_data)
+                    self.x_meta_pairs.append(seq)
+                    self.y.append(y)
+            else:
+                for idx in range(0, len(player_data)-offset+1):
+                    seq = player_data.iloc[idx:idx+offset]  # stack `window_size` frames (0~win_size-1), (4~win_size+win_stride) pair
+                    img_data = [img_path, seq['time_index'].values, seq['time_stamp'].values]
+                    y = seq['pair_rank_label'].values[-1]  # label of the last frame
+
+                    seq = seq.loc[:, self.numeric_columns]
+                    seq = seq.drop(
+                        columns=['player_idx', 'pair_rank_label', 'epoch', 'engine_tick', 'time_stamp', 'activity',
+                                 'score', 'game_idx', 'arousal', 'arousal_window_mean']).values.astype(np.float32)
+                    self.x_img_pairs.append(img_data)
+                    self.x_meta_pairs.append(seq)
+                    self.y.append(y)
+            # TODO: Add player related information (biography)
+
 
     def __len__(self):
         return len(self.y)
@@ -75,22 +92,33 @@ class PairDataset(Dataset):
         y = self.y[idx]  # 0, 0.5, 1 => 0, 1, 2
 
         img_path, time_indices, time_stamps = img_data
-        with h5py.File(img_path, 'r') as f:
-            # (sequence, height, width, channel)
-            compare_frames = torch.stack(
-                [self.transform(Image.fromarray(np.array(f[f'frames/{time_index}_{time_stamp}'])))
-                 for time_index, time_stamp in zip(time_indices[:self.window_size], time_stamps[:self.window_size])])
-            # (sequence, height, width, channel) to (sequence, channel, height, width) // open cv BGR format 0~255
-            main_frames = torch.stack(
-                [self.transform(Image.fromarray(np.array(f[f'frames/{time_index}_{time_stamp}'])))
-                 for time_index, time_stamp in zip(time_indices[-self.window_size:], time_stamps[-self.window_size:])])
 
-        # 4, 3, 320, 480 [frames]
-        return compare_frames, \
-            torch.tensor(meta[:self.window_size]), \
-            main_frames, \
-            torch.tensor(meta[-self.window_size:]), \
-            torch.tensor(y)
+        if self.config['train']['mode'] == 'non_ordinal':
+            with h5py.File(img_path, 'r') as f:
+                # (sequence, height, width, channel)
+                frames = torch.stack(
+                    [self.transform(Image.fromarray(np.array(f[f'frames/{time_index}_{time_stamp}'])))
+                     for time_index, time_stamp in zip(time_indices, time_stamps)])
+                # (sequence, height, width, channel) to (sequence, channel, height, width) // open cv BGR format 0~255
+
+            return frames, torch.tensor(meta), torch.tensor(y)
+        else:
+            with h5py.File(img_path, 'r') as f:
+                # (sequence, height, width, channel)
+                compare_frames = torch.stack(
+                    [self.transform(Image.fromarray(np.array(f[f'frames/{time_index}_{time_stamp}'])))
+                     for time_index, time_stamp in zip(time_indices[:self.window_size], time_stamps[:self.window_size])])
+                # (sequence, height, width, channel) to (sequence, channel, height, width) // open cv BGR format 0~255
+                main_frames = torch.stack(
+                    [self.transform(Image.fromarray(np.array(f[f'frames/{time_index}_{time_stamp}'])))
+                     for time_index, time_stamp in zip(time_indices[-self.window_size:], time_stamps[-self.window_size:])])
+
+            # 4, 3, 320, 480 [frames]
+            return compare_frames, \
+                torch.tensor(meta[:self.window_size]), \
+                main_frames, \
+                torch.tensor(meta[-self.window_size:]), \
+                torch.tensor(y)
 
 
 class TestDataset:
@@ -122,9 +150,7 @@ class TestDataset:
             for idx in range(0, len(player_data) - self.window_size):
                 seq = player_data.iloc[idx:idx + self.window_size]  # stack `window_size` frames (0~win_size-1), (4~win_size+win_stride) pair
                 img_data = [img_path, seq['time_index'].values, seq['time_stamp'].values]
-                relative_y = seq['pair_rank_label'].values[-1]
                 y = seq['arousal'].values[-1]
-                mean_y = seq['arousal_window_mean'].values[-1]
                 seq = seq.loc[:, self.numeric_columns]
                 seq = seq.drop(
                     columns=['player_idx', 'pair_rank_label', 'epoch', 'engine_tick', 'time_stamp', 'activity', 'score',
@@ -132,7 +158,7 @@ class TestDataset:
 
                 self.x_img.append(img_data)
                 self.x_meta.append(seq)
-                self.y.append([y, relative_y, mean_y])
+                self.y.append(y)
 
     def sample_player_data(self, size=10):
         p_indices = np.random.choice(len(self.player_idx)-1, size)
@@ -144,7 +170,7 @@ class TestDataset:
     def __getitem__(self, idx):
         img_data = self.x_img[idx]  # images per player
         meta = self.x_meta[idx]  # game log data per player
-        y, r_y, m_y = self.y[idx]  # [arousal, relative_arousal, mean_arousal]
+        y = self.y[idx]  # [arousal, relative_arousal, mean_arousal]
 
         img_path, time_indices, time_stamps = img_data
         with h5py.File(img_path, 'r') as f:
@@ -157,6 +183,4 @@ class TestDataset:
         # 4, 3, 320, 480 [frames]
         return frames, \
             torch.tensor(meta[:self.window_size]), \
-            torch.tensor(y), \
-            torch.tensor(r_y), \
-            torch.tensor(m_y)
+            torch.tensor(y)

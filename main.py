@@ -7,6 +7,7 @@ import horovod
 
 from dataloader.dataset import PairDataset, TestDataset
 from trainer.ranknet_trainer import RanknetTrainer
+from trainer.trainer import Trainer
 from utils.vis import *
 from utils.utils import *
 
@@ -24,8 +25,12 @@ def train(config, dataset, testset):
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 
-    trainer = RanknetTrainer(dataset, testset, config=config, logger=logger)
+    if config['train']['mode'] == 'non_ordinal':
+        trainer = Trainer(dataset, testset, config=config, logger=logger)
+    else:
+        trainer = RanknetTrainer(dataset, testset, config=config, logger=logger)
     trainer.train()
+    logger.info("Training is done!")
 
 
 if __name__ == '__main__':

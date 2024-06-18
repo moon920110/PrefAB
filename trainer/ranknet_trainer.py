@@ -2,6 +2,7 @@ import os
 import time
 import json
 
+import dtw
 import torch
 import pandas as pd
 import numpy as np
@@ -26,6 +27,8 @@ class RanknetTrainer:
         self.config = config
         self.logger = logger
         self.window_size = config['train']['window_size']
+        self.mode = config['train']['mode']
+        self.batch_size = config['train']['batch_size']
 
         train_size = int(len(dataset) * config['train']['train_ratio'])
         val_size = int(len(dataset) * config['train']['val_ratio'])
@@ -78,14 +81,14 @@ class RanknetTrainer:
 
         # (batch, pair, sequence, channel, height, width)
         train_loader = DataLoader(self.train_dataset,
-                                  batch_size=self.config['train']['batch_size'],
+                                  batch_size=self.batch_size,
                                   sampler=train_sampler,
                                   num_workers=self.config['train']['num_workers'],
                                   shuffle=(train_sampler is None),
                                   pin_memory=True,
                                   drop_last=True)
         val_loader = DataLoader(self.val_dataset,
-                                batch_size=self.config['train']['batch_size'],
+                                batch_size=self.batch_size,
                                 sampler=val_sampler,
                                 num_workers=self.config['train']['num_workers'],
                                 shuffle=(val_sampler is None),
@@ -143,8 +146,11 @@ class RanknetTrainer:
                 o = o2 - o1
 
                 ranknet_loss = rank_criterion(o, label)
-                ae_loss = ae_criterion(d1, img1.view(-1, *img1.shape[2:])) + ae_criterion(d2, img2.view(-1, *img2.shape[2:]))
-                loss = ranknet_loss + ae_loss * self.config['train']['ae_loss_weight']
+                if self.mode != 'feature':
+                    ae_loss = ae_criterion(d1, img1.view(-1, *img1.shape[2:])) + ae_criterion(d2, img2.view(-1, *img2.shape[2:]))
+                    loss = ranknet_loss + ae_loss * self.config['train']['ae_loss_weight']
+                else:
+                    loss = ranknet_loss
                 loss.backward()
                 optimizer.step()
                 scheduler.step()
@@ -153,25 +159,26 @@ class RanknetTrainer:
 
                 if writer:
                     writer.add_scalar(f'train/ranknet_loss', ranknet_loss.item(), epc * len_train_loader + i)
-                    writer.add_scalar(f'train/ae_loss', ae_loss.item(), epc * len_train_loader + i)
+                    if self.mode != 'feature':
+                        writer.add_scalar(f'train/ae_loss', ae_loss.item(), epc * len_train_loader + i)
                     writer.add_scalar(f'train/accuracy', acc, epc * len_train_loader + i)
                     writer.add_scalar(f'train/loss', loss.item(), epc * len_train_loader + i)
                 losses += loss.item()
 
-            if d1 is not None and d2 is not None:
-                out_for_saving1 = d1.view(int(d1.shape[0]/self.window_size), self.window_size, *d1.shape[1:])[-1]
-                out_for_saving2 = d2.view(int(d2.shape[0]/self.window_size), self.window_size, *d2.shape[1:])[-1]
 
             total_cnt = l0_cnt + l1_cnt + l2_cnt
             self.logger.info(f'[gpu:{rank}]epoch {epc} avg. loss {losses / len_train_loader:.4f} '
-                             f'l0_ratio {l0_cnt / total_cnt:.4f} '
-                             f'l1_ratio {l1_cnt / total_cnt:.4f} '
-                             f'l2_ratio {l2_cnt / total_cnt:.4f}')
+                             f'l0_cnt {l0_cnt} '
+                             f'l1_cnt {l1_cnt} '
+                             f'l2_cnt {l2_cnt}')
 
             # write output image to tensorboard
             if writer:
-                writer.add_images(f'train/epc_{epc}_output_1', out_for_saving1, epc, dataformats='NCHW')
-                writer.add_images(f'train/epc_{epc}_output_2', out_for_saving2, epc, dataformats='NCHW')
+                if d1 is not None and d2 is not None:
+                    out_for_saving1 = d1.view(int(d1.shape[0] / self.window_size), self.window_size, *d1.shape[1:])[-1]
+                    out_for_saving2 = d2.view(int(d2.shape[0] / self.window_size), self.window_size, *d2.shape[1:])[-1]
+                    writer.add_images(f'train/epc_{epc}_output_1', out_for_saving1, epc, dataformats='NCHW')
+                    writer.add_images(f'train/epc_{epc}_output_2', out_for_saving2, epc, dataformats='NCHW')
                 cm = pd.DataFrame(cm, index=['dec', 'same', 'inc'], columns=['dec', 'same', 'inc'])
                 plt.figure(figsize=(30, 30))
                 sns.heatmap(cm, annot=True, cmap='Blues')
@@ -207,8 +214,8 @@ class RanknetTrainer:
                     if d1 is not None and d2 is not None:
                         out_for_saving1 = d1.view(int(d1.shape[0] / self.window_size), self.window_size, *d1.shape[1:])[-1]
                         out_for_saving2 = d2.view(int(d2.shape[0] / self.window_size), self.window_size, *d2.shape[1:])[-1]
-                    writer.add_images(f'val/epc_{epc}_output_1', out_for_saving1, epc, dataformats='NCHW')
-                    writer.add_images(f'val/epc_{epc}_output_2', out_for_saving2, epc, dataformats='NCHW')
+                        writer.add_images(f'val/epc_{epc}_output_1', out_for_saving1, epc, dataformats='NCHW')
+                        writer.add_images(f'val/epc_{epc}_output_2', out_for_saving2, epc, dataformats='NCHW')
 
                     self.logger.info(f'[gpu:{rank}]epoch {epc} avg. val acc {avg_acc:.4f}')
                     cm = pd.DataFrame(cm, index=['dec', 'same', 'inc'], columns=['dec', 'same', 'inc'])
@@ -219,8 +226,8 @@ class RanknetTrainer:
 
             # model save if validation accuracy is the best
             if rank == 0:
+                self._validate_per_player(model, 5, writer, epc)
                 if avg_acc > best_acc and avg_acc > 0.70:
-                    self._validate_per_player(model, 5, writer, epc, self.config['train']['cutpoints'])
                     best_acc = avg_acc
                     torch.save(
                         model.state_dict(),
@@ -239,19 +246,17 @@ class RanknetTrainer:
 
         return acc, cm
 
-    def _validate_per_player(self, model, size, writer, epc, cutpoints):
+    def _validate_per_player(self, model, size, writer, epc):
         indices = self.testset.sample_player_data(size)
-        for i, idx in enumerate(indices):
+        dtw_distances = []
+        for i, idx in tqdm(enumerate(indices), desc='Evaluating DTW'):
             start_idx = self.testset.player_idx[idx]
             end_idx = self.testset.player_idx[idx + 1]
 
             outputs = []
-            ordinal_outputs = []
             labels = []
-            relative_labels = []
-            mean_labels = []
             for data_idx in range(start_idx, end_idx):
-                img, feature, y, r_y, m_y = self.testset[data_idx]
+                img, feature, y = self.testset[data_idx]
                 img = img.unsqueeze(0).to(self.device)
                 feature = feature.unsqueeze(0).to(self.device)
 
@@ -259,31 +264,21 @@ class RanknetTrainer:
 
                 outputs.append(o.cpu().detach().numpy())
                 labels.append(y)
-                relative_labels.append(r_y * 0.5)
-                mean_labels.append(m_y)
-                if len(ordinal_outputs) == 0:
-                    ordinal_outputs.append(0)
-                else:
-                    diff = o.cpu().detach().numpy() - ordinal_outputs[-1]
-                    if diff < cutpoints[0]:
-                        ordinal_outputs.append(ordinal_outputs[-1] - 1)
-                    elif diff < cutpoints[1]:
-                        ordinal_outputs.append(ordinal_outputs[-1])
-                    else:
-                        ordinal_outputs.append(ordinal_outputs[-1] + 1)
 
             # normalize output to 0~1
-            outputs = np.array(outputs)
+            outputs = np.array(outputs).squeeze().squeeze()
             outputs = (outputs - outputs.min()) / (outputs.max() - outputs.min())
-            ordinal_outputs = np.array(ordinal_outputs)
-            ordinal_outputs = (ordinal_outputs - ordinal_outputs.min()) / (ordinal_outputs.max() - ordinal_outputs.min())
+            dtw_distances.append(dtw.dtw(outputs, np.array(labels)).distance)
 
-            for ii, (o, oo, y, r_y, m_y) in enumerate(zip(outputs, ordinal_outputs, labels, relative_labels, mean_labels)):
+            for ii, (o, y) in enumerate(zip(outputs, labels)):
                 if writer:
                     writer.add_scalars(f'test/epc{epc}_player_{idx}',
                                        {'predict': o,
-                                        'ordinal_predict': oo,
                                         'arousal': y,
-                                        'relative_arousal': r_y,
-                                        'mean_arousal': m_y},
+                                       },
                                        ii)
+
+        dtw_distances = np.array(dtw_distances)
+        if writer:
+            writer.add_scalar(f'test/dtw_mean', dtw_distances.mean(), epc)
+            writer.add_scalar(f'test/dtw_std', dtw_distances.std(), epc)

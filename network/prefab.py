@@ -12,6 +12,7 @@ class Prefab(nn.Module):
         super(Prefab, self).__init__()
         self.config = config
         self.window_size = config['train']['window_size']
+        self.mode = config['train']['mode']
         ext_layers = []
         fc_layers = []
 
@@ -21,29 +22,57 @@ class Prefab(nn.Module):
         encoder_layers = TransformerEncoderLayer(d_model=d_model, nhead=8, dropout=config['train']['dropout'], batch_first=True)
         self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers=self.config['train']['num_transform_layers'])
 
-        self.autoencoder = AutoEncoder()
+        if self.mode == 'prefab' or self.mode == 'non_ordinal':
+            self.autoencoder = AutoEncoder()
 
-        while f_dim // 2 > d_model:
-            ext_layers.append(nn.Linear(f_dim, f_dim//2))
-            ext_layers.append(nn.LayerNorm(f_dim//2))
+            while f_dim // 2 > d_model:
+                ext_layers.append(nn.Linear(f_dim, f_dim//2))
+                ext_layers.append(nn.LayerNorm(f_dim//2))
+                ext_layers.append(nn.LeakyReLU())
+                f_dim = f_dim // 2
+            ext_layers.append(nn.Linear(f_dim, d_model - meta_feature_size))
+            ext_layers.append(nn.LayerNorm(d_model - meta_feature_size))
             ext_layers.append(nn.LeakyReLU())
-            # ext_layers.append(nn.Dropout1d(config['train']['dropout']))
-            f_dim = f_dim // 2
-        ext_layers.append(nn.Linear(f_dim, d_model - meta_feature_size))
-        ext_layers.append(nn.LayerNorm(d_model - meta_feature_size))
-        ext_layers.append(nn.LeakyReLU())
-        # ext_layers.append(nn.Dropout1d(config['train']['dropout']))
-        f_dim = d_model
+            f_dim = d_model
+
+        elif self.mode == 'image':
+            self.autoencoder = AutoEncoder()
+
+            while f_dim // 2 > d_model:
+                ext_layers.append(nn.Linear(f_dim, f_dim // 2))
+                ext_layers.append(nn.LayerNorm(f_dim // 2))
+                ext_layers.append(nn.LeakyReLU())
+                f_dim = f_dim // 2
+            ext_layers.append(nn.Linear(f_dim, d_model))
+            ext_layers.append(nn.LayerNorm(d_model))
+            ext_layers.append(nn.LeakyReLU())
+            f_dim = d_model
+
+        else:
+            self.autoencoder = None
+            self.extractor = None
+
+            f_dim = meta_feature_size
+            while f_dim * 2 < d_model:
+                ext_layers.append(nn.Linear(f_dim, f_dim * 2))
+                ext_layers.append(nn.LayerNorm(f_dim * 2))
+                ext_layers.append(nn.LeakyReLU())
+                f_dim = f_dim * 2
+            ext_layers.append(nn.Linear(f_dim, d_model))
+            ext_layers.append(nn.LayerNorm(d_model))
+            ext_layers.append(nn.LeakyReLU())
+            f_dim = d_model
 
         self.extractor = nn.Sequential(*ext_layers)
+
         self.pos_encoder = PositionalEncoding(d_model, dropout=config['train']['dropout'])
 
         while f_dim > 64:
             fc_layers.append(nn.Linear(f_dim, f_dim//2))
             fc_layers.append(nn.LayerNorm(f_dim//2))
             fc_layers.append(nn.ReLU())
-            # fc_layers.append(nn.Dropout(config['train']['dropout']))
             f_dim = f_dim // 2
+
         fc_layers.append(nn.Linear(f_dim, 1))
 
         self.fc = nn.Sequential(*fc_layers)
@@ -68,21 +97,46 @@ class Prefab(nn.Module):
                 init.constant_(m.bias, 0.0)
 
     def forward(self, img, feature):
-        reshaped_img = img.view(-1, *img.shape[2:])  # batch, win_size, c, h, w => batch * win_size, c, h, w
-        e, d = self.autoencoder(reshaped_img)
-        e = e.view(int(e.shape[0]/self.window_size), self.window_size, -1)
+        if self.mode == 'prefab' or self.mode == 'non_ordinal':
+            reshaped_img = img.view(-1, *img.shape[2:])  # batch, win_size, c, h, w => batch * win_size, c, h, w
+            e, d = self.autoencoder(reshaped_img)
+            e = e.view(int(e.shape[0]/self.window_size), self.window_size, -1)
 
-        e2 = self.extractor(e.view(-1, e.shape[-1]))
-        e2 = e2.view(int(e2.shape[0]/self.window_size), self.window_size, -1)
+            e2 = self.extractor(e.view(-1, e.shape[-1]))
+            e2 = e2.view(int(e2.shape[0]/self.window_size), self.window_size, -1)
 
-        e3 = torch.cat((e2, feature), dim=-1)  # batch, sequence, feature
-        ti = self.pos_encoder(e3)
+            e3 = torch.cat((e2, feature), dim=-1)  # batch, sequence, feature
+            ti = self.pos_encoder(e3)
 
-        x = self.transformer_encoder(ti)
-        avg_pooled = torch.mean(x, dim=1)
-        x = self.fc(avg_pooled)
+            x = self.transformer_encoder(ti)
+            avg_pooled = torch.mean(x, dim=1)
+            x = self.fc(avg_pooled)
+
+        elif self.mode == 'image':
+            reshaped_img = img.view(-1, *img.shape[2:])  # batch, win_size, c, h, w => batch * win_size, c, h, w
+            e, d = self.autoencoder(reshaped_img)
+            e = e.view(int(e.shape[0] / self.window_size), self.window_size, -1)
+
+            e2 = self.extractor(e.view(-1, e.shape[-1]))
+            e2 = e2.view(int(e2.shape[0] / self.window_size), self.window_size, -1)
+
+            ti = self.pos_encoder(e2)
+
+            x = self.transformer_encoder(ti)
+            avg_pooled = torch.mean(x, dim=1)
+            x = self.fc(avg_pooled)
+
+        else:
+            e = self.extractor(feature)
+            ti = self.pos_encoder(e)
+
+            x = self.transformer_encoder(ti)
+            avg_pooled = torch.mean(x, dim=1)
+            x = self.fc(avg_pooled)
+            d = None
 
         return x, d
+
 
 
 class PositionalEncoding(nn.Module):
