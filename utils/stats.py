@@ -1,9 +1,16 @@
+import os
+import glob
+
 import pandas as pd
 import dtw
 import numpy as np
 import matplotlib.pyplot as plt
+
+from matplotlib.font_manager import FontProperties
 from tslearn.clustering import TimeSeriesKMeans, silhouette_score
 from scipy.signal import find_peaks
+
+from utils.utils import read_scalar_summary
 
 
 def calc_correlation_per_player(data):
@@ -78,10 +85,12 @@ def get_dtw_cluster(data, config):
 
 
 # TODO: peak를 구하는 근거 찾아서 정교화할 것, 현재 top peak 찾으면 탐지가 안 되는 애들이 좀 있음.
-def find_significant_peaks_and_valleys(data, threshold=0.1, prominence=None):
+# + tensorboard에 기록된 데이터 가져와서 predict에서 peak 찾아서 ground truth와 비교해보기
+def find_significant_peaks_and_valleys(
+        data, threshold=0.1, prominence=None, distance=None, title=None, save_dir=None, show=False):
     smoothed_data = np.convolve(data, np.ones(10) / 10, mode='same')
-    peaks, _ = find_peaks(smoothed_data, prominence=prominence)
-    valleys, _ = find_peaks(-smoothed_data, prominence=prominence)
+    peaks, p_p = find_peaks(smoothed_data, prominence=prominence, distance=distance)
+    valleys, p_v = find_peaks(-smoothed_data, prominence=prominence, distance=distance)
 
     peak_prominences = smoothed_data[peaks] - np.min(smoothed_data)
     valley_depths = np.max(smoothed_data) - smoothed_data[valleys]
@@ -93,43 +102,92 @@ def find_significant_peaks_and_valleys(data, threshold=0.1, prominence=None):
     top_valleys = valleys[np.argsort(valley_depths)[-valley_threshold:]]
 
     # show peaks and valleys
-    plt.plot(smoothed_data)
-    plt.plot(top_peaks, smoothed_data[top_peaks], "x")
-    plt.plot(top_valleys, smoothed_data[top_valleys], "x")
-    plt.show()
+    plt.plot(data)
+    plt.plot(top_peaks, data[top_peaks], "x")
+    plt.plot(top_valleys, data[top_valleys], "x")
+    if title:
+        plt.title(title)
+        if save_dir:
+            plt.savefig(os.path.join(save_dir, f'{title}.png'))
+            print(f'save to {os.path.join(save_dir, f"{title}.png")}')
+    if show:
+        plt.show()
+
+    plt.close()
+
+    return top_peaks, top_valleys
 
 
-# if __name__ == "__main__":
-#     from dataloader.again_reader import AgainReader
-#     with open('../config/config.yaml') as f:
-#         config = yaml.load(f, Loader=yaml.FullLoader)
-#     game = 'Shootout'
-#     print(f'read data {game}')
-#     again_reader = AgainReader(config)
-#     # data = again_reader.game_info_by_name(game)
-#     data = again_reader.game_info_by_name('Shootout')
-#     print(f'len data: {len(data)}')
-#
-#     find_significant_peaks_and_valleys(data['arousal'].values)
-    # get_dtw_cluster(data, config)
+def post_analysis(root):
+    log_dirs = glob.glob(os.path.join(root, 'test_epc[5-9][0-9]*'))
+    log_dict = {}
+    for log_dir in log_dirs:
+        dir_name = log_dir.split('/')[-1]
+        session = dir_name[:-8]
+        tag = dir_name[-7:]
 
-    #######################################################################
-    # feature_names = again_reader.available_feature_names_by_game(game)
-    # print(f'available feature names: {feature_names}')
-    # print('calc total correlation')
-    # total_corr = calc_correlation(data)
-    # print('calc correlation per player')
-    # corr_dict = calc_correlation_per_player(data)
-    # # corr_dict = {'total': total_corr, **corr_dict}
-    #
-    # print(f'save to ../data/{game}_correlation.csv')
-    # corr_dict_df = pd.DataFrame(corr_dict)
-    # mean = corr_dict_df.mean(axis=1)
-    # std = corr_dict_df.std(axis=1)
-    #
-    # corr_dict_df['mean'] = mean
-    # corr_dict_df['std'] = std
-    # corr_dict_df['total'] = total_corr
-    #
-    # # corr_dict_df.T.dropna(axis=1, how='all').to_csv(f'../data/{game}_correlation.csv')
-    # corr_dict_df.T.to_csv(f'../data/{game}_correlation.csv')
+        if session not in log_dict:
+            log_dict[session] = {}
+        if tag == 'arousal':
+            log_dict[session]['arousal'] = log_dir
+        else:
+            log_dict[session]['predict'] = log_dir
+
+    font = FontProperties()
+    font.set_weight('bold')
+    font.set_size(14)
+
+    accs = []
+    errors = []
+    for session, tags in log_dict.items():
+        arousal_path = tags['arousal']
+        predict_path = tags['predict']
+
+        arousal_event_files = glob.glob(os.path.join(arousal_path, "events.out.tfevents.*"))
+        predict_event_files = glob.glob(os.path.join(predict_path, "events.out.tfevents.*"))
+        _, arousal_summary = read_scalar_summary(arousal_event_files[0])
+        _, predict_summary = read_scalar_summary(predict_event_files[0])
+
+        arousal_peaks, arousal_valleys = find_significant_peaks_and_valleys(arousal_summary, threshold=0, prominence=0.01, distance=20)
+        predict_peaks, predict_valleys = find_significant_peaks_and_valleys(predict_summary, threshold=0, prominence=0.01, distance=20)
+
+        correct_peak_cnt = 0
+        error_peak_cnt = 0
+        for arousal_peak in arousal_peaks:
+            # find nearest peak in predict within +-10 distance
+            nearest_peak = np.argmin(np.abs(arousal_peak - predict_peaks))
+            if np.abs(arousal_peak - predict_peaks[nearest_peak]) < 10:  # half of distance
+                correct_peak_cnt += 1
+        accs.append(correct_peak_cnt / len(predict_peaks))
+
+        for predict_peak in predict_peaks:
+            # find nearest peak in predict within +-10 distance
+            nearest_peak = np.argmin(np.abs(predict_peak - arousal_peaks))
+            if np.abs(predict_peak - arousal_peaks[nearest_peak]) >= 10:
+                error_peak_cnt += 1
+        errors.append(error_peak_cnt / len(predict_peaks))
+
+        plt.plot(arousal_summary, label='arousal (ground truth)')
+        plt.plot(predict_summary, color='gray', linestyle='--', alpha=0.5, label='predicted arousal')
+        plt.plot(arousal_peaks, arousal_summary[arousal_peaks], "r*", label='true peaks')
+        plt.plot(arousal_valleys, arousal_summary[arousal_valleys], "r*")
+        plt.plot(predict_peaks, arousal_summary[predict_peaks], "g*")
+        plt.plot(predict_valleys, arousal_summary[predict_valleys], "g*")
+        plt.plot(predict_peaks, predict_summary[predict_peaks], "g*", alpha=0.5, label='predicted peaks')
+        plt.plot(predict_valleys, predict_summary[predict_valleys], "g*", alpha=0.5)
+
+        for peak, valley in zip(predict_peaks, predict_valleys):
+            plt.vlines(peak, arousal_summary[peak], predict_summary[peak], colors='green', linestyles=':', alpha=0.5)
+            plt.vlines(valley, arousal_summary[valley], predict_summary[valley], colors='green', linestyles=':', alpha=0.5)
+
+        plt.title(session)
+        plt.legend()
+
+        save_dir = os.path.join(root.split('/')[0], 'peak', root.split('/')[-1])
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+            # print(f'make dir: {save_dir}')
+
+        plt.savefig(os.path.join(save_dir, f'{session}.png'))
+        # print(f'save to {os.path.join(save_dir, f"{session}.png")}')
+    print(f'exp: {root}, accuracy: {np.mean(accs)}({np.std(accs)}), error: {np.mean(errors)}({np.std(errors)})')
