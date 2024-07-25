@@ -9,7 +9,7 @@ import cv2
 from dataloader.again_reader import AgainReader
 
 
-def parse_images_from_video_by_timestamp(video_path, out_dir, again, config, transform=False):
+def parse_images_from_video_by_timestamp(video_path, out_dir, again, config, transform=False, compression='gzip', compression_level=9):
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
@@ -30,8 +30,8 @@ def parse_images_from_video_by_timestamp(video_path, out_dir, again, config, tra
             video_full_path = os.path.join(video_path, video)
             video_out_path = os.path.join(out_dir, f'{video_name}.h5')
 
-            # if os.path.exists(video_out_path):
-            #     continue
+            if os.path.exists(video_out_path):
+                continue
 
             cap = cv2.VideoCapture(video_full_path)
             fps = cap.get(cv2.CAP_PROP_FPS)
@@ -53,7 +53,7 @@ def parse_images_from_video_by_timestamp(video_path, out_dir, again, config, tra
                             # resize image to 1/2 size
                             frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
                         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                        frame_group.create_dataset(f'{time_index}_{time_stamp}', data=frame, dtype='uint8')
+                        frame_group.create_dataset(f'{time_index}_{time_stamp}', data=frame, dtype='uint8', compression=compression, compression_opts=compression_level)
 
             cap.release()
 

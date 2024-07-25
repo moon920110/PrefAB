@@ -1,7 +1,11 @@
+import os
+import argparse
+
 from dataloader.again_reader import AgainReader
 import yaml
 
 from utils.stats import find_significant_peaks_and_valleys, post_analysis, get_dtw_cluster
+from utils.video_frame_extractor import parse_images_from_video_by_timestamp
 
 
 def dtw_cluster_demo():
@@ -44,5 +48,23 @@ def post_analysis_demo():
         post_analysis(dir)
 
 
+def video_fram_extractor_main():
+    parser = argparse.ArgumentParser(description='PrefAB prototype')
+    parser.add_argument('--config', type=str, default='config/config.yaml')
+    args = parser.parse_args()
+
+    with open(args.config) as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+
+    again = AgainReader(config=config)
+
+    parse_images_from_video_by_timestamp(video_path=os.path.join(again.data_path, config['data']['vision']['video']),
+                                         out_dir=os.path.join(again.data_path, config['data']['vision']['frame']),
+                                         again=again.again,
+                                         config=config,
+                                         transform=True,
+                                         )
+
+
 if __name__ == '__main__':
-    post_analysis_demo()
+    video_fram_extractor_main()
