@@ -6,12 +6,13 @@ from torchvision import transforms
 from tqdm import tqdm
 from PIL import Image
 
-from dataloader.again_reader import AgainReader
 
 
 class PairDataset(Dataset):
-    def __init__(self, config, logger=None):
-        self.dataset, self.numeric_columns, self.bio_features_size = AgainReader(config, logger).prepare_sequential_ranknet_dataset()
+    def __init__(self, dataset, numeric_columns, bio_features_size, config, logger=None):
+        self.dataset = dataset
+        self.numeric_columns = numeric_columns
+        self.bio_features_size = bio_features_size
         self.config = config
         self.window_size = config['train']['window_size']
         self.window_stride = config['train']['window_stride']

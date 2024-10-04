@@ -1,5 +1,6 @@
 import os
 
+import torch
 import logging
 import argparse
 import yaml
@@ -10,6 +11,7 @@ from trainer.ranknet_trainer import RanknetTrainer
 from trainer.trainer import Trainer
 from utils.vis import *
 from utils.utils import *
+from dataloader.again_reader import AgainReader
 
 
 def train(config, dataset, testset):
@@ -49,11 +51,16 @@ if __name__ == '__main__':
     if not os.path.exists(os.path.join(config['train']['log_dir'], f"{config['train']['exp']}")):
         os.makedirs(os.path.join(config['train']['log_dir'], f"{config['train']['exp']}"))
 
-    dataset = PairDataset(config)
-    t_dataset = TestDataset(dataset.dataset, dataset.numeric_columns, config)
+    dataset, numeric_columns, bio_features_size = AgainReader(config).prepare_sequential_ranknet_dataset()
+    train_size = int(len(dataset) * config['train']['train_ratio'])
+    test_size = len(dataset) - train_size
+    train_samples, test_samples = torch.utils.data.random_split(dataset, [train_size, test_size])
+
+    train_dataset = PairDataset(train_samples, numeric_columns, bio_features_size, config)
+    test_dataset = TestDataset(test_samples, numeric_columns, config)
     if config['train']['distributed']['multi_gpu']:
         horovod.run(train,
-                    args=(config, dataset, t_dataset),
+                    args=(config, train_dataset, test_dataset),
                     np=config['train']['distributed']['num_gpus'])
     else:
-        train(config, dataset, t_dataset)
+        train(config, train_dataset, test_dataset)

@@ -31,15 +31,14 @@ class RanknetTrainer:
         self.batch_size = config['train']['batch_size']
 
         train_size = int(len(dataset) * config['train']['train_ratio'])
-        val_size = int(len(dataset) * config['train']['val_ratio'])
-        test_size = len(dataset) - train_size - val_size
-        self.train_dataset, self.val_dataset, self.test_dataset = random_split(
+        val_size = len(dataset) - train_size
+        self.train_dataset, self.val_dataset = random_split(
             dataset,
-            [train_size, val_size, test_size]
+            [train_size, val_size]
         )
         self.meta_feature_size = dataset.get_meta_feature_size()
         self.bio_features_size = dataset.bio_features_size
-        self.testset = testset
+        self.test_dataset = testset
 
         # torch.set_float32_matmul_precision('high')
         if config['train']['distributed']['multi_gpu']:
@@ -251,11 +250,11 @@ class RanknetTrainer:
         return acc, cm
 
     def _validate_per_player(self, model, size, writer, epc):
-        indices = self.testset.sample_player_data(size)
+        indices = self.test_dataset.sample_player_data(size)
         dtw_distances = []
         for i, idx in tqdm(enumerate(indices), desc='Evaluating DTW'):
-            start_idx = self.testset.player_idx[idx]
-            end_idx = self.testset.player_idx[idx + 1]
+            start_idx = self.test_dataset.player_idx[idx]
+            end_idx = self.test_dataset.player_idx[idx + 1]
 
             outputs = []
             labels = []
@@ -263,7 +262,7 @@ class RanknetTrainer:
             features = []
             bios = []
             for data_idx in range(start_idx, end_idx):
-                img, feature, bio, y = self.testset[data_idx]
+                img, feature, bio, y = self.test_dataset[data_idx]
                 imgs.append(img)
                 features.append(feature)
                 bios.append(bio)
