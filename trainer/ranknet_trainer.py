@@ -148,8 +148,8 @@ class RanknetTrainer:
 
                 ranknet_loss = rank_criterion(o, label)
                 if self.mode != 'feature':
-                    # ae_loss = ae_criterion(d1, img1.view(-1, *img1.shape[2:])) + ae_criterion(d2, img2.view(-1, *img2.shape[2:]))
-                    ae_loss = 0
+                    ae_loss = ae_criterion(d1, img1.view(-1, *img1.shape[2:])) + ae_criterion(d2, img2.view(-1, *img2.shape[2:]))
+                    # ae_loss = 0
                     loss = ranknet_loss + ae_loss * self.config['train']['ae_loss_weight']
                 else:
                     loss = ranknet_loss
@@ -161,8 +161,8 @@ class RanknetTrainer:
 
                 if writer:
                     writer.add_scalar(f'train/ranknet_loss', ranknet_loss.item(), epc * len_train_loader + i)
-                    # if self.mode != 'feature':
-                    #     writer.add_scalar(f'train/ae_loss', ae_loss.item(), epc * len_train_loader + i)
+                    if self.mode != 'feature':
+                        writer.add_scalar(f'train/ae_loss', ae_loss.item(), epc * len_train_loader + i)
                     writer.add_scalar(f'train/accuracy', acc, epc * len_train_loader + i)
                     writer.add_scalar(f'train/loss', loss.item(), epc * len_train_loader + i)
                 losses += loss.item()
@@ -202,9 +202,6 @@ class RanknetTrainer:
                     o1, d1 = model(img1, feature1, bio)
                     o2, d2 = model(img2, feature2, bio)
                     o = o2 - o1
-                    # if epc > 5:
-                    #     for oo1, oo2, oo in zip(o1, o2, o):
-                    #         print(oo1, oo2, oo)
 
                     acc, cm_tmp = self._metric(o, label, self.config['train']['cutpoints'])
                     cm += cm_tmp
