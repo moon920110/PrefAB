@@ -14,10 +14,14 @@ class AgainReader:
 
         if self.logger is not None:
             self.logger.info(f'data from {os.path.join(self.data_path, "clean_data", "clean_data.csv")}')
+            self.logger.info(f'bio data from {os.path.join(self.data_path, "raw_data", "biographical_data_with_genre.csv")}')
         # read csv without row index
         self.again = pd.read_csv(os.path.join(self.data_path, 'clean_data', 'clean_data.csv'),
                                  encoding='utf-8',
                                  low_memory=False)
+        self.bio = pd.read_csv(os.path.join(self.data_path, 'raw_data', 'biographical_data_with_genre.csv'),
+                               encoding='utf-8',
+                               low_memory=False)
         self.again.columns = [col.split(']')[-1] for col in self.again.columns]
 
     def _prepare_ordinal_dataset(self, domain, scope):
@@ -71,6 +75,13 @@ class AgainReader:
         pbar = tqdm(total=total_iter, desc='Preparing sequential dataset')
         numeric_columns = data.select_dtypes(include=['number']).columns
 
+        self.bio['Genre_idx'] = pd.factorize(self.bio['Genre'])[0]
+        gender_size = self.bio['Gender'].unique().size
+        play_freq_size = self.bio['Play Frequency'].unique().size
+        gamer_size = self.bio['Gamer'].unique().size
+        genre_size = self.bio['Genre_idx'].unique().size
+        bio_size = {'gender': gender_size, 'play_freq': play_freq_size, 'gamer': gamer_size, 'genre': genre_size}
+
         # a game log for each player: one session
         for game in data['game'].unique():
             for player in data['player_id'].unique():
@@ -82,12 +93,15 @@ class AgainReader:
                 video_full_path = os.path.join(self.data_path, self.config['data']['vision']['frame'], video_name)
 
                 player_data = player_data.sort_values('time_index')
+
+                player_bio = self.bio[self.bio['ParticipantID'] == player]
+                player_bio = player_bio.drop(columns=['ParticipantID', 'Metacritic Code', 'Genre'])
                 # pads = pd.concat([player_data.iloc[0]] * 3, axis=1).T
                 # player_data = pd.concat([pads, player_data], ignore_index=True)
 
-                x.append([player_data, video_full_path])
+                x.append([player_data, video_full_path, player_bio])
 
-        return x, numeric_columns
+        return x, numeric_columns, bio_size
 
     def game_info_by_genre(self, genre):
         again = self.again[self.again['genre'] == genre].dropna(axis=1, how='any')

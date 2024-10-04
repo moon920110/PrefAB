@@ -38,6 +38,7 @@ class RanknetTrainer:
             [train_size, val_size, test_size]
         )
         self.meta_feature_size = dataset.get_meta_feature_size()
+        self.bio_features_size = dataset.bio_features_size
         self.testset = testset
 
         # torch.set_float32_matmul_precision('high')
@@ -101,7 +102,7 @@ class RanknetTrainer:
         len_val_loader = len(val_loader) // eval_div if len(val_loader) > eval_div else 1
 
         self.logger.info(f'build model gpu: {rank}')
-        model = Prefab(self.config, self.meta_feature_size)
+        model = Prefab(self.config, self.meta_feature_size, self.bio_features_size)
         model.to(self.device)
         ae_criterion = nn.L1Loss().to(self.device)
         rank_criterion = OrdinalCrossEntropyLoss(self.config['train']['cutpoints']).to(self.device)  # FocalLoss(alpha=self.config['train']['focal_alpha'], gamma=self.config['train']['focal_gamma']).to(self.device)
@@ -129,25 +130,27 @@ class RanknetTrainer:
                 train_sampler.set_epoch(epc)
                 self.logger.info(f'[gpu {rank}]train sampler set epoch {epc}')
 
-            for i, (img1, feature1, img2, feature2, label) in tqdm(enumerate(train_loader), desc=f'Training Epoch {epc}'):
+            for i, (img1, feature1, img2, feature2, bio, label) in tqdm(enumerate(train_loader), desc=f'Training Epoch {epc}'):
                 img1 = img1.to(self.device)
                 feature1 = feature1.to(self.device)
                 img2 = img2.to(self.device)
                 feature2 = feature2.to(self.device)
                 label = label.to(self.device)
+                bio = bio.to(self.device)
 
                 l0_cnt += len(label[label == 0])
                 l1_cnt += len(label[label == 1])
                 l2_cnt += len(label[label == 2])
 
                 optimizer.zero_grad()
-                o1, d1 = model(img1, feature1)
-                o2, d2 = model(img2, feature2)
+                o1, d1 = model(img1, feature1, bio)
+                o2, d2 = model(img2, feature2, bio)
                 o = o2 - o1
 
                 ranknet_loss = rank_criterion(o, label)
                 if self.mode != 'feature':
-                    ae_loss = ae_criterion(d1, img1.view(-1, *img1.shape[2:])) + ae_criterion(d2, img2.view(-1, *img2.shape[2:]))
+                    # ae_loss = ae_criterion(d1, img1.view(-1, *img1.shape[2:])) + ae_criterion(d2, img2.view(-1, *img2.shape[2:]))
+                    ae_loss = 0
                     loss = ranknet_loss + ae_loss * self.config['train']['ae_loss_weight']
                 else:
                     loss = ranknet_loss
@@ -159,8 +162,8 @@ class RanknetTrainer:
 
                 if writer:
                     writer.add_scalar(f'train/ranknet_loss', ranknet_loss.item(), epc * len_train_loader + i)
-                    if self.mode != 'feature':
-                        writer.add_scalar(f'train/ae_loss', ae_loss.item(), epc * len_train_loader + i)
+                    # if self.mode != 'feature':
+                    #     writer.add_scalar(f'train/ae_loss', ae_loss.item(), epc * len_train_loader + i)
                     writer.add_scalar(f'train/accuracy', acc, epc * len_train_loader + i)
                     writer.add_scalar(f'train/loss', loss.item(), epc * len_train_loader + i)
                 losses += loss.item()
@@ -189,15 +192,16 @@ class RanknetTrainer:
                 accs = 0
                 cm = np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]])
                 d1, d2 = None, None
-                for i, (img1, feature1, img2, feature2, label) in tqdm(enumerate(val_loader), desc=f'Evaluation'):
+                for i, (img1, feature1, img2, feature2, bio, label) in tqdm(enumerate(val_loader), desc=f'Evaluation'):
                     img1 = img1.to(self.device)
                     feature1 = feature1.to(self.device)
                     img2 = img2.to(self.device)
                     feature2 = feature2.to(self.device)
                     label = label.to(self.device)
+                    bio = bio.to(self.device)
 
-                    o1, d1 = model(img1, feature1)
-                    o2, d2 = model(img2, feature2)
+                    o1, d1 = model(img1, feature1, bio)
+                    o2, d2 = model(img2, feature2, bio)
                     o = o2 - o1
                     # if epc > 5:
                     #     for oo1, oo2, oo in zip(o1, o2, o):
@@ -255,20 +259,32 @@ class RanknetTrainer:
 
             outputs = []
             labels = []
+            imgs = []
+            features = []
+            bios = []
             for data_idx in range(start_idx, end_idx):
-                img, feature, y = self.testset[data_idx]
-                img = img.unsqueeze(0).to(self.device)
-                feature = feature.unsqueeze(0).to(self.device)
-
-                o, _ = model(img, feature)
-
-                outputs.append(o.cpu().detach().numpy())
+                img, feature, bio, y = self.testset[data_idx]
+                imgs.append(img)
+                features.append(feature)
+                bios.append(bio)
                 labels.append(y)
+
+                if len(imgs) == self.batch_size or data_idx == end_idx - 1:
+                    imgs = torch.stack(imgs).to(self.device)
+                    features = torch.stack(features).to(self.device)
+                    bios = torch.stack(bios).to(self.device)
+                    o, _ = model(imgs, features, bios)
+                    o = o.cpu().detach().numpy()
+                    outputs.extend(o)
+
+                    imgs = []
+                    features = []
+                    bios = []
 
             # normalize output to 0~1
             outputs = np.array(outputs).squeeze().squeeze()
             outputs = (outputs - outputs.min()) / (outputs.max() - outputs.min())
-            dtw_distances.append(dtw.dtw(outputs, np.array(labels)).distance)
+            # dtw_distances.append(dtw.dtw(outputs, np.array(labels)).distance)
 
             for ii, (o, y) in enumerate(zip(outputs, labels)):
                 if writer:
@@ -278,7 +294,7 @@ class RanknetTrainer:
                                        },
                                        ii)
 
-        dtw_distances = np.array(dtw_distances)
-        if writer:
-            writer.add_scalar(f'test/dtw_mean', dtw_distances.mean(), epc)
-            writer.add_scalar(f'test/dtw_std', dtw_distances.std(), epc)
+        # dtw_distances = np.array(dtw_distances)
+        # if writer:
+        #     writer.add_scalar(f'test/dtw_mean', dtw_distances.mean(), epc)
+        #     writer.add_scalar(f'test/dtw_std', dtw_distances.std(), epc)

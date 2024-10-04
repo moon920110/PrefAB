@@ -11,13 +11,14 @@ from dataloader.again_reader import AgainReader
 
 class PairDataset(Dataset):
     def __init__(self, config, logger=None):
-        self.dataset, self.numeric_columns = AgainReader(config, logger).prepare_sequential_ranknet_dataset()
+        self.dataset, self.numeric_columns, self.bio_features_size = AgainReader(config, logger).prepare_sequential_ranknet_dataset()
         self.config = config
         self.window_size = config['train']['window_size']
         self.window_stride = config['train']['window_stride']
 
         self.x_img_pairs = []
         self.x_meta_pairs = []
+        self.x_bio = []
         self.y = []
 
         self.transform = transforms.Compose([
@@ -33,7 +34,7 @@ class PairDataset(Dataset):
             self.dataset = self.dataset[:self.config['debug']['data_limit']]  # limit for a part of one game
 
         offset = self.window_size + self.window_stride
-        for player_data, img_path in tqdm(self.dataset, desc=f'Preparing sequential dataset'):  # for each game and player
+        for player_data, img_path, bio in tqdm(self.dataset, desc=f'Preparing sequential dataset'):  # for each game and player
             if len(player_data) == 0:
                 continue
 
@@ -53,6 +54,7 @@ class PairDataset(Dataset):
                                  'score', 'game_idx', 'arousal', 'arousal_window_mean']).values.astype(np.float32)
                     self.x_img_pairs.append(img_data)
                     self.x_meta_pairs.append(seq)
+                    self.x_bio.append(bio.values)
                     self.y.append(y)
             else:
                 for idx in range(0, len(player_data)-offset+1):
@@ -66,8 +68,8 @@ class PairDataset(Dataset):
                                  'score', 'game_idx', 'arousal', 'arousal_window_mean']).values.astype(np.float32)
                     self.x_img_pairs.append(img_data)
                     self.x_meta_pairs.append(seq)
+                    self.x_bio.append(bio.values)
                     self.y.append(y)
-            # TODO: Add player related information (biography)
 
 
     def __len__(self):
@@ -90,6 +92,7 @@ class PairDataset(Dataset):
         img_data = self.x_img_pairs[idx]  # images: (0:4) = comparison frames, (1:5) = main frames
         meta = self.x_meta_pairs[idx]  # game log data
         y = self.y[idx]  # 0, 0.5, 1 => 0, 1, 2
+        bio = self.x_bio[idx]
 
         img_path, time_indices, time_stamps = img_data
 
@@ -101,7 +104,7 @@ class PairDataset(Dataset):
                      for time_index, time_stamp in zip(time_indices, time_stamps)])
                 # (sequence, height, width, channel) to (sequence, channel, height, width) // open cv BGR format 0~255
 
-            return frames, torch.tensor(meta), torch.tensor(y)
+            return frames, torch.tensor(meta), torch.tensor(bio), torch.tensor(y)
         else:
             with h5py.File(img_path, 'r') as f:
                 # (sequence, height, width, channel)
@@ -118,10 +121,11 @@ class PairDataset(Dataset):
                 torch.tensor(meta[:self.window_size]), \
                 main_frames, \
                 torch.tensor(meta[-self.window_size:]), \
+                torch.tensor(bio), \
                 torch.tensor(y)
 
 
-class TestDataset:
+class TestDataset(Dataset):
     def __init__(self, dataset, numeric_columns, config):
         self.dataset = dataset
         self.numeric_columns = numeric_columns
@@ -131,6 +135,7 @@ class TestDataset:
         self.x_img = []
         self.x_meta = []
         self.y = []
+        self.bio = []
         self.player_idx = []
 
         self.transform = transforms.Compose([
@@ -142,7 +147,7 @@ class TestDataset:
         self.init_sequence_dataset()
 
     def init_sequence_dataset(self):
-        for player_data, img_path in tqdm(self.dataset, desc=f'Preparing sequential dataset for validation'):  # for each game and player
+        for player_data, img_path, bio in tqdm(self.dataset, desc=f'Preparing sequential dataset for validation'):  # for each game and player
             if len(player_data) == 0:
                 continue
 
@@ -158,6 +163,7 @@ class TestDataset:
 
                 self.x_img.append(img_data)
                 self.x_meta.append(seq)
+                self.bio.append(bio.values)
                 self.y.append(y)
 
     def sample_player_data(self, size=10):
@@ -171,6 +177,7 @@ class TestDataset:
         img_data = self.x_img[idx]  # images per player
         meta = self.x_meta[idx]  # game log data per player
         y = self.y[idx]  # [arousal, relative_arousal, mean_arousal]
+        bio = self.bio[idx]
 
         img_path, time_indices, time_stamps = img_data
         with h5py.File(img_path, 'r') as f:
@@ -183,4 +190,5 @@ class TestDataset:
         # 4, 3, 320, 480 [frames]
         return frames, \
             torch.tensor(meta[:self.window_size]), \
+            torch.tensor(bio), \
             torch.tensor(y)
