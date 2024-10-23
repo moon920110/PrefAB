@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 from tslearn.clustering import TimeSeriesKMeans, silhouette_score
 from scipy.signal import find_peaks
+from scipy.interpolate import PchipInterpolator, CubicSpline
 
 from utils.utils import read_scalar_summary
 
@@ -84,8 +85,6 @@ def get_dtw_cluster(data, config):
     return session_cluster
 
 
-# TODO: peak를 구하는 근거 찾아서 정교화할 것, 현재 top peak 찾으면 탐지가 안 되는 애들이 좀 있음.
-# + tensorboard에 기록된 데이터 가져와서 predict에서 peak 찾아서 ground truth와 비교해보기
 def find_significant_peaks_and_valleys(
         data, threshold=0.1, prominence=None, distance=None, title=None, save_dir=None, show=False):
     smoothed_data = np.convolve(data, np.ones(10) / 10, mode='same')
@@ -118,8 +117,11 @@ def find_significant_peaks_and_valleys(
     return top_peaks, top_valleys
 
 
-def post_analysis(root):
-    log_dirs = glob.glob(os.path.join(root, 'test_epc[5-9][0-9]*'))
+def inflection_comparison(root, show=False, epoch=False):
+    if epoch:
+        log_dirs = glob.glob(os.path.join(root, 'test_epc[5-9][0-9]*'))  # recent 10 epochs (epoch 60)
+    else:
+        log_dirs = glob.glob(os.path.join(root, 'test_*'))
     log_dict = {}
     for log_dir in log_dirs:
         dir_name = log_dir.split('/')[-1]
@@ -137,6 +139,7 @@ def post_analysis(root):
     font.set_weight('bold')
     font.set_size(14)
 
+    print(log_dict)
     accs = []
     errors = []
     for session, tags in log_dict.items():
@@ -150,35 +153,35 @@ def post_analysis(root):
 
         arousal_peaks, arousal_valleys = find_significant_peaks_and_valleys(arousal_summary, threshold=0, prominence=0.01, distance=20)
         predict_peaks, predict_valleys = find_significant_peaks_and_valleys(predict_summary, threshold=0, prominence=0.01, distance=20)
+        arousal_inflections = np.concatenate([arousal_peaks, arousal_valleys])
+        predict_inflections = np.concatenate([predict_peaks, predict_valleys])
 
         correct_peak_cnt = 0
         error_peak_cnt = 0
-        for arousal_peak in arousal_peaks:
+        for arousal_inflection in arousal_inflections:
             # find nearest peak in predict within +-10 distance
-            nearest_peak = np.argmin(np.abs(arousal_peak - predict_peaks))
-            if np.abs(arousal_peak - predict_peaks[nearest_peak]) < 10:  # half of distance
+            nearest_peak = np.argmin(np.abs(arousal_inflection - predict_inflections))
+            if np.abs(arousal_inflection - predict_inflections[nearest_peak]) < 10:  # half of distance
                 correct_peak_cnt += 1
-        accs.append(correct_peak_cnt / len(predict_peaks))
+        accs.append(correct_peak_cnt / len(predict_inflections))
 
-        for predict_peak in predict_peaks:
+        for predict_inflection in predict_inflections:
             # find nearest peak in predict within +-10 distance
-            nearest_peak = np.argmin(np.abs(predict_peak - arousal_peaks))
-            if np.abs(predict_peak - arousal_peaks[nearest_peak]) >= 10:
+            nearest_peak = np.argmin(np.abs(predict_inflection - arousal_inflections))
+            if np.abs(predict_inflection - arousal_inflections[nearest_peak]) >= 10:
                 error_peak_cnt += 1
-        errors.append(error_peak_cnt / len(predict_peaks))
+        errors.append(error_peak_cnt / len(predict_inflections))
 
         plt.plot(arousal_summary, label='arousal (ground truth)')
         plt.plot(predict_summary, color='gray', linestyle='--', alpha=0.5, label='predicted arousal')
-        plt.plot(arousal_peaks, arousal_summary[arousal_peaks], "r*", label='true peaks')
-        plt.plot(arousal_valleys, arousal_summary[arousal_valleys], "r*")
-        plt.plot(predict_peaks, arousal_summary[predict_peaks], "g*")
-        plt.plot(predict_valleys, arousal_summary[predict_valleys], "g*")
-        plt.plot(predict_peaks, predict_summary[predict_peaks], "g*", alpha=0.5, label='predicted peaks')
-        plt.plot(predict_valleys, predict_summary[predict_valleys], "g*", alpha=0.5)
+        plt.plot(arousal_inflections, arousal_summary[arousal_inflections], "r*", label='true peaks')
+        # plt.plot(arousal_valleys, arousal_summary[arousal_valleys], "r*")
+        plt.plot(predict_inflections, predict_summary[predict_inflections], "g*", alpha=0.5, label='predicted peaks')
+        # plt.plot(predict_valleys, predict_summary[predict_valleys], "g*", alpha=0.5)
 
-        for peak, valley in zip(predict_peaks, predict_valleys):
-            plt.vlines(peak, arousal_summary[peak], predict_summary[peak], colors='green', linestyles=':', alpha=0.5)
-            plt.vlines(valley, arousal_summary[valley], predict_summary[valley], colors='green', linestyles=':', alpha=0.5)
+        for inflection in predict_inflections:
+            plt.vlines(inflection, arousal_summary[inflection], predict_summary[inflection], colors='green', linestyles=':', alpha=0.5)
+            # plt.vlines(valley, arousal_summary[valley], predict_summary[valley], colors='green', linestyles=':', alpha=0.5)
 
         plt.title(session)
         plt.legend()
@@ -189,5 +192,86 @@ def post_analysis(root):
             # print(f'make dir: {save_dir}')
 
         plt.savefig(os.path.join(save_dir, f'{session}.png'))
+        if show:
+            plt.show()
         # print(f'save to {os.path.join(save_dir, f"{session}.png")}')
     print(f'exp: {root}, accuracy: {np.mean(accs)}({np.std(accs)}), error: {np.mean(errors)}({np.std(errors)})')
+
+
+# TODO: uniform sample/random sample로 interpolation한 것과 결과 비교해볼것, 평균적으로 inflection이 얼마나 발생하는 지 계산해볼것
+def reconstruct_state_via_interpolation(root, show=False, epoch=False):
+    if epoch:
+        log_dirs = glob.glob(os.path.join(root, 'test_epc[5-9][0-9]*'))  # recent 10 epochs (epoch 60)
+    else:
+        log_dirs = glob.glob(os.path.join(root, 'test*'))
+    log_dict = {}
+    window_size = 6
+    sample_size = 10
+
+    for log_dir in log_dirs:
+        dir_name = log_dir.split('/')[-1]
+        session = dir_name[:-8]
+        tag = dir_name[-7:]
+
+        if session not in log_dict:
+            log_dict[session] = {}
+        if tag == 'arousal':
+            log_dict[session]['arousal'] = log_dir
+        else:
+            log_dict[session]['predict'] = log_dir
+
+    font = FontProperties()
+    font.set_weight('bold')
+    font.set_size(14)
+
+    for session, tags in log_dict.items():
+        arousal_path = tags['arousal']
+        predict_path = tags['predict']
+
+        arousal_event_files = glob.glob(os.path.join(arousal_path, "events.out.tfevents.*"))
+        predict_event_files = glob.glob(os.path.join(predict_path, "events.out.tfevents.*"))
+        _, arousal_summary = read_scalar_summary(arousal_event_files[0])
+        _, predict_summary = read_scalar_summary(predict_event_files[0])
+
+        predict_peaks, predict_valleys = find_significant_peaks_and_valleys(predict_summary, threshold=0,
+                                                                            prominence=0.01, distance=20)
+        predict_inflections = sorted(np.concatenate([predict_peaks, predict_valleys]))
+
+        gt_arousals = [arousal_summary[0]]
+        gt_indices = [[0]]
+        for predict_peak in predict_inflections:
+            front_offset = window_size if predict_peak - window_size > 0 else 0
+            end_offset = window_size if predict_peak + window_size < len(arousal_summary) else 0
+            gt_indices.append(np.arange(predict_peak - front_offset, predict_peak + end_offset))
+            gt_arousals.append(arousal_summary[predict_peak - front_offset:predict_peak + end_offset])
+        gt_arousals.append(arousal_summary[-1])
+        gt_indices.append([len(arousal_summary) - 1])
+
+        gt_indices = np.hstack(gt_indices)
+        gt_arousals = np.hstack(gt_arousals)
+
+        unique_indices, unique_values = np.unique(gt_indices, return_index=True)
+        gt_indices = gt_indices[unique_values]
+        gt_arousals = gt_arousals[unique_values]
+
+        pchip_interpolator = PchipInterpolator(gt_indices, gt_arousals)
+
+        full_range_indices = np.linspace(0, len(arousal_summary), len(arousal_summary))
+
+        pchip_values = pchip_interpolator(full_range_indices)
+
+        plt.plot(arousal_summary, label='arousal (ground truth)')
+        plt.plot(gt_indices, gt_arousals, 'o', label='Sampled points', alpha=0.3)
+        plt.plot(predict_inflections, arousal_summary[predict_inflections], 'x', label='Predicted peaks')
+        plt.plot(full_range_indices, pchip_values, label='Pchip interpolation', alpha=0.5)
+        plt.legend()
+        plt.title(session)
+
+        save_dir = os.path.join(root.split('/')[0], 'reconstruct', root.split('/')[-1])
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+            # print(f'make dir: {save_dir}')
+
+        plt.savefig(os.path.join(save_dir, f'{session}.png'))
+        if show:
+            plt.show()

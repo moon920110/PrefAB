@@ -4,7 +4,7 @@ import argparse
 from dataloader.again_reader import AgainReader
 import yaml
 
-from utils.stats import find_significant_peaks_and_valleys, post_analysis, get_dtw_cluster
+from utils.stats import find_significant_peaks_and_valleys, inflection_comparison, get_dtw_cluster, reconstruct_state_via_interpolation
 from utils.video_frame_extractor import parse_images_from_video_by_timestamp
 
 
@@ -42,10 +42,15 @@ def find_peak_demo():
             break
 
 
-def post_analysis_demo():
-    dirs = ['log/regression-heist-test', 'log/prefab-heist', 'log/regression-topdown', 'log/prefab-topdown']
-    for dir in dirs:
-        post_analysis(dir)
+def post_analysis_demo(case='None'):
+    dirs = [['log/prefab-topdown', True]]
+    for item in dirs:
+        # inflection_comparison(dir)
+        if case == 'Comparison':
+            inflection_comparison(item[0], True, item[1])
+        elif case == 'Reconstruction':
+            reconstruct_state_via_interpolation(item[0], True, item[1])
+
 
 
 def video_fram_extractor_main():
@@ -67,4 +72,4 @@ def video_fram_extractor_main():
 
 
 if __name__ == '__main__':
-    video_fram_extractor_main()
+    post_analysis_demo('Comparison')
