@@ -45,7 +45,7 @@ class RanknetTrainer:
             hvd.init()
             if torch.cuda.is_available():
                 torch.cuda.set_device(hvd.local_rank())
-                torch.cuda.manual_seed(config['train']['distributed']['seed'])
+                torch.cuda.manual_seed(config['train']['seed'])
                 self.device = torch.device(f'cuda', hvd.local_rank())
         else:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -226,14 +226,15 @@ class RanknetTrainer:
 
             # model save if validation accuracy is the best
             if rank == 0:
-                self._validate_per_player(model, 5, writer, epc)
                 if avg_acc > best_acc and avg_acc > 0.70:
                     best_acc = avg_acc
                     torch.save(
                         model.state_dict(),
                         os.path.join(self.config['train']['save_dir'],
-                                     f'ranknet_{self.config["train"]["exp"]}_{epc}_{avg_acc*100:.2f}.pth')
+                                     f'ranknet_{self.config["train"]["exp"]}_best.pth')
                     )
+
+        self._test_per_player(model, 10, writer)
         if writer is not None:
             writer.close()
 
@@ -246,10 +247,20 @@ class RanknetTrainer:
 
         return acc, cm
 
-    def _validate_per_player(self, model, size, writer, epc):
+    def _test_per_player(self, model, size, writer):
+        # load best model
+        model.load_state_dict(
+            torch.load(
+                os.path.join(self.config['train']['save_dir'],
+                             f'ranknet_{self.config["train"]["exp"]}_best.pth')
+            )
+        )
+        model.to(self.device)
+        model.eval()
+
         indices = self.test_dataset.sample_player_data(size)
         dtw_distances = []
-        for i, idx in tqdm(enumerate(indices), desc='Evaluating DTW'):
+        for i, idx in tqdm(enumerate(indices), desc='Reconstructing Graphs'):
             start_idx = self.test_dataset.player_idx[idx]
             end_idx = self.test_dataset.player_idx[idx + 1]
 
@@ -284,7 +295,7 @@ class RanknetTrainer:
 
             for ii, (o, y) in enumerate(zip(outputs, labels)):
                 if writer:
-                    writer.add_scalars(f'test/epc{epc}_player_{idx}',
+                    writer.add_scalars(f'test/player_{idx}',
                                        {'predict': o,
                                         'arousal': y,
                                        },

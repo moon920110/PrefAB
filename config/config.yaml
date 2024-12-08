@@ -1,10 +1,9 @@
 description: |
-  Change output to a single real number with sigmoid
-TODO: |
-  배우지 않은 게임에 대해서는 얼마나 잘 하는지? -> 입력 feature가 달라서 안됨
+  Separate the train set and test set explicitly
 
 data:
   path: /home/jovyan/data/AGAIN
+#  path: data
   vision:
     video: videos_mp4
     frame: frame_data
@@ -24,21 +23,20 @@ game_name:
   Endless: endless
 
 train:
-  exp: prefab-runngun-nodecoder-bio
+  exp: debug
   log_dir: log/
   save_dir: log/model
   mode: prefab  # prefab: full; image: only image; feature: only feature; non_ordinal: non-ordinal
   domain: game  # genre, game
   genre: Shooter  # All, Shooter, Platformer, Racing
-  game: Run'N'Gun
+  game: TopDown
   lr: 0.001
   focal_alpha: 1
   focal_gamma: 5
   epoch: 60
   num_transform_layers: 1
   batch_size: 20  # A100 (40G): 24, V100 (32G): 16
-  train_ratio: 0.7
-  val_ratio: 0.3
+  train_ratio: 0.8
   window_size: 12
   window_stride: 4
   ae_loss_weight: 0.001
@@ -50,7 +48,8 @@ train:
   d_model: 200
   schedule: 10
   data_balancing: true
-  cutpoints: [-0.1, 0.1]
+  cutpoints: [-1, 1]
+  seed: 1125
   distributed:
     multi_gpu: true
     num_gpus: 4
@@ -58,18 +57,26 @@ train:
     rank: 0
     dist_url: tcp://localhost:11111
     backend: nccl
-    seed: 1125
+
+test:
+  exp: prefab-topdown-bio
+  log_dir: log/test/
+  save_dir: log/model
+  sample_size: 5
+  mode: prefab
+  batch_size: 20
+  seed: 1125
 
 clustering:
   activate: false
   metric: 'softdtw'  # 'euclidean', 'dtw', 'softdtw
-  input_type: 'arousal_window_mean'  # 'arousal', 'arousal_window_mean'
-  n_clusters: 3
+  input_type: 'arousal'  # 'arousal', 'arousal_window_mean'
+  n_clusters: 4
   metric_params:
     gamma: 2
   random_state: 7
   verbose: true
-  visualize: false
+  visualize: true
   cluster_sample: 2  # 0: all, 1~n: cluster index of 0~n-1
   caching: false
   load_cache: true

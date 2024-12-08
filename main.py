@@ -7,8 +7,8 @@ import yaml
 import horovod
 
 from dataloader.dataset import PairDataset, TestDataset
-from trainer.ranknet_trainer import RanknetTrainer
-from trainer.trainer import Trainer
+from executor.ranknet_trainer import RanknetTrainer
+from executor.trainer import Trainer
 from utils.vis import *
 from utils.utils import *
 from dataloader.again_reader import AgainReader
@@ -54,7 +54,11 @@ if __name__ == '__main__':
     dataset, numeric_columns, bio_features_size = AgainReader(config).prepare_sequential_ranknet_dataset()
     train_size = int(len(dataset) * config['train']['train_ratio'])
     test_size = len(dataset) - train_size
-    train_samples, test_samples = torch.utils.data.random_split(dataset, [train_size, test_size])
+    train_samples, test_samples = torch.utils.data.random_split(dataset,
+                                                                [train_size, test_size],
+                                                                generator=torch.Generator().manual_seed(
+                                                                    config['train']['seed'])
+                                                                )
 
     train_dataset = PairDataset(train_samples, numeric_columns, bio_features_size, config)
     test_dataset = TestDataset(test_samples, numeric_columns, config)

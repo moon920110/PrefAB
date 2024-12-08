@@ -1,24 +1,27 @@
 import os
 import argparse
+import logging
 
-from dataloader.again_reader import AgainReader
 import yaml
+import torch
 
 from utils.stats import find_significant_peaks_and_valleys, inflection_comparison, get_dtw_cluster, reconstruct_state_via_interpolation
 from utils.video_frame_extractor import parse_images_from_video_by_timestamp
+from utils.utils import create_new_filename
+from dataloader.dataset import PairDataset, TestDataset
+from dataloader.again_reader import AgainReader
+from executor.tester import RanknetTester
 
 
 def dtw_cluster_demo():
-    with open('../config/config.yaml') as f:
+    with open('./config/config.yaml') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
-    game = 'Shootout'
+    game = 'TopDown'
     again_reader = AgainReader(config)
-    # data = again_reader.game_info_by_name(game)
-    data = again_reader.game_info_by_name('Shootout')
+    data = again_reader.game_info_by_name(game)
     print(f'len data: {len(data)}')
 
-    find_significant_peaks_and_valleys(data['arousal'].values)
-    get_dtw_cluster(data, config)
+    return get_dtw_cluster(data, config)
 
 
 def find_peak_demo():
@@ -71,5 +74,52 @@ def video_fram_extractor_main():
                                          )
 
 
+def tsne_demo():
+    parser = argparse.ArgumentParser(description='PrefAB prototype')
+    parser.add_argument('--config', type=str, default='config/config.yaml')
+    args = parser.parse_args()
+
+    with open(args.config) as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+
+    if not os.path.exists(config['test']['log_dir']):
+        os.makedirs(config['test']['log_dir'])
+    config['test']['exp'] = create_new_filename(config['test']['log_dir'], config['test']['exp'])
+
+    if not os.path.exists(os.path.join(config['test']['log_dir'], f"{config['test']['exp']}")):
+        os.makedirs(os.path.join(config['test']['log_dir'], f"{config['test']['exp']}"))
+
+    dataset, numeric_columns, bio_features_size = AgainReader(config).prepare_sequential_ranknet_dataset()
+    train_size = int(len(dataset) * config['train']['train_ratio'])
+    test_size = len(dataset) - train_size
+    train_samples, test_samples = torch.utils.data.random_split(dataset,
+                                                                [train_size, test_size],
+                                                                generator=torch.Generator().manual_seed(
+                                                                    config['test']['seed'])
+                                                                )
+
+    train_dataset = PairDataset(train_samples, numeric_columns, bio_features_size, config)
+    test_dataset = TestDataset(test_samples, numeric_columns, config)
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    sh = logging.StreamHandler()
+    sh.setFormatter(formatter)
+    logger.addHandler(sh)
+
+    fh = logging.FileHandler(os.path.join(config['test']['log_dir'], f"{config['test']['exp']}", 'log.log'))
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+
+    tester = RanknetTester(train_dataset, test_dataset, config=config, logger=logger)
+    tester.test()
+    logger.info("Testing is done!")
+
+
+
 if __name__ == '__main__':
-    post_analysis_demo('Comparison')
+    # post_analysis_demo('Comparison')
+    # tsne_demo()
+    dtw_cluster_demo()

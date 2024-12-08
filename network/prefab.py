@@ -124,7 +124,7 @@ class Prefab(nn.Module):
                 init.constant_(m.weight, 1.0)
                 init.constant_(m.bias, 0.0)
 
-    def forward(self, img, feature, bio):
+    def forward(self, img, feature, bio, test=False):
         bio = bio.squeeze(1)
 
         age = bio[:, 0]
@@ -153,8 +153,8 @@ class Prefab(nn.Module):
             e2 = self.extractor(e.view(-1, e.shape[-1]))
             e2 = e2.view(int(e2.shape[0]/self.window_size), self.window_size, -1)
 
-            e3 = torch.cat((e2, feature, bio_ext), dim=-1)  # batch, sequence, feature
-            ti = self.pos_encoder(e3)
+            z = torch.cat((e2, feature, bio_ext), dim=-1)  # batch, sequence, feature
+            ti = self.pos_encoder(z)
 
             x = self.transformer_encoder(ti)
             avg_pooled = torch.mean(x, dim=1)
@@ -168,8 +168,8 @@ class Prefab(nn.Module):
             e2 = self.extractor(e.view(-1, e.shape[-1]))
             e2 = e2.view(int(e2.shape[0] / self.window_size), self.window_size, -1)
 
-            e3 = torch.cat((e2, bio_ext), dim=-1)  # batch, sequence, feature
-            ti = self.pos_encoder(e3)
+            z = torch.cat((e2, bio_ext), dim=-1)  # batch, sequence, feature
+            ti = self.pos_encoder(z)
 
             x = self.transformer_encoder(ti)
             avg_pooled = torch.mean(x, dim=1)
@@ -177,14 +177,16 @@ class Prefab(nn.Module):
 
         else:
             e = self.extractor(feature)
-            e2 = torch.cat((e, bio_ext), dim=-1)  # batch, sequence, feature
-            ti = self.pos_encoder(e2)
+            z = torch.cat((e, bio_ext), dim=-1)  # batch, sequence, feature
+            ti = self.pos_encoder(z)
 
             x = self.transformer_encoder(ti)
             avg_pooled = torch.mean(x, dim=1)
             x = self.fc(avg_pooled)
             d = None
 
+        if test:
+            return x, d, z
         return x, d
 
 
