@@ -23,7 +23,7 @@ game_name:
   Endless: endless
 
 train:
-  exp: debug
+  exp: bio_test
   log_dir: log/
   save_dir: log/model
   mode: prefab  # prefab: full; image: only image; feature: only feature; non_ordinal: non-ordinal
@@ -33,25 +33,25 @@ train:
   lr: 0.001
   focal_alpha: 1
   focal_gamma: 5
-  epoch: 60
+  epoch: 1000
   num_transform_layers: 1
-  batch_size: 20  # A100 (40G): 24, V100 (32G): 16
+  batch_size: 16  # A100 (40G): 24, V100 (32G): 16
   train_ratio: 0.8
   window_size: 12
   window_stride: 4
   ae_loss_weight: 0.001
   output_scale: 10
-  dropout: 0.1  # 0.5 is trash
+  dropout: 0.2  # 0.5 is trash
   num_workers: 16
-  bio_embedding_dim: 8
+  bio_embedding_dim: 4
   f_dim: 27612
   d_model: 200
-  schedule: 10
+  schedule: 30
   data_balancing: true
   cutpoints: [-1, 1]
   seed: 1125
   distributed:
-    multi_gpu: true
+    multi_gpu: false
     num_gpus: 4
     world_size: 1
     rank: 0
@@ -76,9 +76,9 @@ clustering:
     gamma: 2
   random_state: 7
   verbose: true
-  visualize: true
+  visualize: false
   cluster_sample: 2  # 0: all, 1~n: cluster index of 0~n-1
-  caching: false
+  caching: true
   load_cache: true
 
 debug:

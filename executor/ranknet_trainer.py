@@ -2,7 +2,6 @@ import os
 import time
 import json
 
-import dtw
 import torch
 import pandas as pd
 import numpy as np
@@ -112,7 +111,7 @@ class RanknetTrainer:
             optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters(), op=hvd.Adasum, gradient_predivide_factor=1.0)
             hvd.broadcast_parameters(model.state_dict(), root_rank=0)
             hvd.broadcast_optimizer_state(optimizer, root_rank=0)
-        scheduler = lr_scheduler.StepLR(optimizer, step_size=len_train_loader * self.config['train']['schedule'], gamma=0.1)
+        scheduler = lr_scheduler.StepLR(optimizer, step_size=self.config['train']['schedule'], gamma=0.1)
 
         best_acc = 0
 
@@ -155,7 +154,6 @@ class RanknetTrainer:
                     loss = ranknet_loss
                 loss.backward()
                 optimizer.step()
-                scheduler.step()
                 acc, cm_tmp = self._metric(o, label, self.config['train']['cutpoints'])
                 cm += cm_tmp
 
@@ -167,7 +165,7 @@ class RanknetTrainer:
                     writer.add_scalar(f'train/loss', loss.item(), epc * len_train_loader + i)
                 losses += loss.item()
 
-
+            scheduler.step()
             total_cnt = l0_cnt + l1_cnt + l2_cnt
             self.logger.info(f'[gpu:{rank}]epoch {epc} avg. loss {losses / len_train_loader:.4f} '
                              f'l0_cnt {l0_cnt} '

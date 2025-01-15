@@ -193,3 +193,34 @@ class TestDataset(Dataset):
             torch.tensor(meta[:self.window_size]), \
             torch.tensor(bio), \
             torch.tensor(y)
+
+
+class BioDataset(Dataset):
+    def __init__(self, dataset, bio_feature_size, config):
+        self.dataset = dataset
+        self.config = config
+        self.bio_feature_size = bio_feature_size
+        self.label = None
+        self._init_data()
+
+    def _init_data(self):
+        self.label = self.dataset['cluster'].values
+        self.dataset = self.dataset.drop(columns=['cluster']).values
+
+    def compute_sample_weight(self, indices):
+        tmp_y = np.array(self.label)[indices]
+        _, cnts = np.unique(tmp_y, return_counts=True)
+        class_sample_cnt = np.array(cnts)  # count of each label
+        weight = class_sample_cnt.max() / class_sample_cnt
+
+        sample_weight = np.array(weight[tmp_y.astype(int)])
+
+        return sample_weight
+
+    def __len__(self):
+        return len(self.label)
+
+    def __getitem__(self, idx):
+        bio = self.dataset[idx]
+        label = self.label[idx]
+        return torch.tensor(bio), torch.tensor(label, dtype=torch.int64)
