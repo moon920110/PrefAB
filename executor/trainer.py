@@ -19,7 +19,7 @@ from sklearn.metrics import confusion_matrix, accuracy_score, r2_score
 
 from dataloader.distributedWeightedSampler import DistributedWeightedSampler, WeightedSampler
 from network.prefab import Prefab
-from network.loss import FocalLoss, OrdinalCrossEntropyLoss
+from utils.utils import metric
 
 
 class Trainer:
@@ -142,8 +142,7 @@ class Trainer:
 
                 loss.backward()
                 optimizer.step()
-                scheduler.step()
-                acc = self._metric(o, label)
+                acc = metric(o, label, infer_type='regression')
 
                 if writer:
                     writer.add_scalar(f'train/ranknet_loss', ranknet_loss.item(), epc * len_train_loader + i)
@@ -153,7 +152,7 @@ class Trainer:
                     writer.add_scalar(f'train/loss', loss.item(), epc * len_train_loader + i)
                 losses += loss.item()
 
-
+            scheduler.step()
             self.logger.info(f'[gpu:{rank}]epoch {epc} avg. loss {losses / len_train_loader:.4f} ')
 
             # write output image to tensorboard
@@ -174,7 +173,7 @@ class Trainer:
                     o1, d1 = model(img1, feature1)
                     o1 = o1.squeeze()
 
-                    acc = self._metric(o1, label)
+                    acc = metric(o1, label, infer_type='regression')
                     accs += acc
                     if writer:
                         writer.add_scalar(f'val/r2_score', acc, epc * len_val_loader + i)
@@ -199,13 +198,6 @@ class Trainer:
                     )
         if writer is not None:
             writer.close()
-
-    def _metric(self, y_pred, y_true):
-        y_pred = y_pred.cpu().detach().numpy()
-        y_true = y_true.cpu().detach().numpy()
-        r2 = r2_score(y_true, y_pred)
-
-        return r2
 
     def _validate_per_player(self, model, size, writer, epc):
         indices = self.testset.sample_player_data(size)

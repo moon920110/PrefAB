@@ -18,6 +18,7 @@ from sklearn.metrics import confusion_matrix, accuracy_score
 
 from dataloader.distributedWeightedSampler import DistributedWeightedSampler, WeightedSampler
 from network.bio import BioNet
+from utils.utils import metric
 
 
 class BioTrainer:
@@ -131,7 +132,7 @@ class BioTrainer:
 
                 loss.backward()
                 optimizer.step()
-                acc, cm_tmp = self._metric(o, label)
+                acc, cm_tmp = metric(o, label, infer_type='classification')
                 cm += cm_tmp
 
                 if writer:
@@ -160,7 +161,7 @@ class BioTrainer:
                     o1 = model(bio)
                     o1 = o1.squeeze()
 
-                    acc, cm_tmp = self._metric(o1, label)
+                    acc, cm_tmp = metric(o1, label, infer_type='classification')
                     accs += acc
                     cm += cm_tmp
                     if writer:
@@ -186,12 +187,3 @@ class BioTrainer:
         if writer is not None:
             writer.close()
 
-    def _metric(self, y_pred, y_true):
-        y_pred = y_pred.cpu().detach().numpy()
-        y_pred = y_pred.argmax(axis=1)
-        y_true = y_true.cpu().detach().numpy()
-
-        acc = accuracy_score(y_true, y_pred)
-        cm = confusion_matrix(y_true, y_pred, labels=[0, 1, 2, 3])
-
-        return acc, cm

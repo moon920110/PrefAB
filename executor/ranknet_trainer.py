@@ -19,6 +19,7 @@ from sklearn.metrics import confusion_matrix, accuracy_score
 from dataloader.distributedWeightedSampler import DistributedWeightedSampler, WeightedSampler
 from network.prefab import Prefab
 from network.loss import FocalLoss, OrdinalCrossEntropyLoss
+from utils.utils import metric
 
 
 class RanknetTrainer:
@@ -154,7 +155,7 @@ class RanknetTrainer:
                     loss = ranknet_loss
                 loss.backward()
                 optimizer.step()
-                acc, cm_tmp = self._metric(o, label, self.config['train']['cutpoints'])
+                acc, cm_tmp = metric(o, label, self.config['train']['cutpoints'])
                 cm += cm_tmp
 
                 if writer:
@@ -201,7 +202,7 @@ class RanknetTrainer:
                     o2, d2 = model(img2, feature2, bio)
                     o = o2 - o1
 
-                    acc, cm_tmp = self._metric(o, label, self.config['train']['cutpoints'])
+                    acc, cm_tmp = metric(o, label, self.config['train']['cutpoints'])
                     cm += cm_tmp
                     accs += acc
                     if writer:
@@ -235,15 +236,6 @@ class RanknetTrainer:
         self._test_per_player(model, 10, writer)
         if writer is not None:
             writer.close()
-
-    def _metric(self, y_pred, y_true, cutpoints):
-        _y_pred = y_pred.cpu().detach().numpy()
-        _y_pred = np.where(_y_pred < cutpoints[0], 0, np.where(_y_pred < cutpoints[1], 1, 2))
-
-        acc = accuracy_score(y_true.cpu().detach().numpy(), _y_pred)
-        cm = confusion_matrix(y_true.cpu().detach().numpy(), _y_pred, labels=[0, 1, 2])
-
-        return acc, cm
 
     def _test_per_player(self, model, size, writer):
         # load best model
