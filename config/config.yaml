@@ -27,6 +27,7 @@ train:
   log_dir: log/
   save_dir: log/model
   mode: prefab  # prefab: full; image: only image; feature: only feature; non_ordinal: non-ordinal
+  label: cluster  # cluster, arousal, pair_rank_label
   domain: game  # genre, game
   genre: Shooter  # All, Shooter, Platformer, Racing
   game: TopDown
@@ -51,7 +52,7 @@ train:
   cutpoints: [-1, 1]
   seed: 1125
   distributed:
-    multi_gpu: false
+    multi_gpu: true
     num_gpus: 4
     world_size: 1
     rank: 0
@@ -68,7 +69,7 @@ test:
   seed: 1125
 
 clustering:
-  activate: false
+  activate: true
   metric: 'softdtw'  # 'euclidean', 'dtw', 'softdtw
   input_type: 'arousal'  # 'arousal', 'arousal_window_mean'
   n_clusters: 4
@@ -77,9 +78,9 @@ clustering:
   random_state: 7
   verbose: true
   visualize: false
-  cluster_sample: 2  # 0: all, 1~n: cluster index of 0~n-1
+  cluster_sample: 0  # 0: all, 1~n: cluster index of 0~n-1
   caching: true
-  load_cache: true
+  load_cache: false
 
 debug:
   activate: false

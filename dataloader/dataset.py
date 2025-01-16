@@ -47,12 +47,12 @@ class PairDataset(Dataset):
                 for idx in range(0, len(player_data)-self.window_size):
                     seq = player_data.iloc[idx:idx+self.window_size]  # stack `window_size` frames (0~win_size-1)
                     img_data = [img_path, seq['time_index'].values, seq['time_stamp'].values]
-                    y = seq['arousal'].values[-1].astype('float32')  # label of the last frame
+                    y = seq[self.config['train']['label']].values[-1].astype('float32')  # label of the last frame
 
                     seq = seq.loc[:, self.numeric_columns]
                     seq = seq.drop(
                         columns=['player_idx', 'pair_rank_label', 'epoch', 'engine_tick', 'time_stamp', 'activity',
-                                 'score', 'game_idx', 'arousal', 'arousal_window_mean']).values.astype(np.float32)
+                                 'score', 'game_idx', 'arousal', 'arousal_window_mean', 'cluster']).values.astype(np.float32)
                     self.x_img_pairs.append(img_data)
                     self.x_meta_pairs.append(seq)
                     self.x_bio.append(bio.values)
@@ -61,12 +61,12 @@ class PairDataset(Dataset):
                 for idx in range(0, len(player_data)-offset+1):
                     seq = player_data.iloc[idx:idx+offset]  # stack `window_size` frames (0~win_size-1), (4~win_size+win_stride) pair
                     img_data = [img_path, seq['time_index'].values, seq['time_stamp'].values]
-                    y = seq['pair_rank_label'].values[-1]  # label of the last frame
+                    y = seq[self.config['train']['label']].values[-1]  # label of the last frame
 
                     seq = seq.loc[:, self.numeric_columns]
                     seq = seq.drop(
                         columns=['player_idx', 'pair_rank_label', 'epoch', 'engine_tick', 'time_stamp', 'activity',
-                                 'score', 'game_idx', 'arousal', 'arousal_window_mean']).values.astype(np.float32)
+                                 'score', 'game_idx', 'arousal', 'arousal_window_mean', 'cluster']).values.astype(np.float32)
                     self.x_img_pairs.append(img_data)
                     self.x_meta_pairs.append(seq)
                     self.x_bio.append(bio.values)
@@ -156,11 +156,11 @@ class TestDataset(Dataset):
             for idx in range(0, len(player_data) - self.window_size):
                 seq = player_data.iloc[idx:idx + self.window_size]  # stack `window_size` frames (0~win_size-1), (4~win_size+win_stride) pair
                 img_data = [img_path, seq['time_index'].values, seq['time_stamp'].values]
-                y = seq['arousal'].values[-1]
+                y = seq[self.config['train']['label']].values[-1]
                 seq = seq.loc[:, self.numeric_columns]
                 seq = seq.drop(
                     columns=['player_idx', 'pair_rank_label', 'epoch', 'engine_tick', 'time_stamp', 'activity', 'score',
-                             'game_idx', 'arousal', 'arousal_window_mean']).values.astype(np.float32)
+                             'game_idx', 'arousal', 'arousal_window_mean', 'cluster']).values.astype(np.float32)
 
                 self.x_img.append(img_data)
                 self.x_meta.append(seq)

@@ -48,21 +48,21 @@ class AgainReader:
         again['pair_rank_label'] = pair_rank_label
         if self.config['clustering']['activate']:
             if self.config['clustering']['load_cache']:
-                clusters = pd.read_csv(os.path.join(self.data_path, 'cluster', 'cluster.csv'))
+                clusters = pd.read_csv(os.path.join(self.data_path, 'cluster', f'cluster_{scope}.csv'))
             else:
                 clusters = get_dtw_cluster(again, self.config)
                 if self.config['clustering']['caching']:
                     if not os.path.exists(os.path.join(self.data_path, 'cluster')):
                         os.mkdir(os.path.join(self.data_path, 'cluster'))
                     clusters = pd.DataFrame(clusters.items(), columns=['session_id', 'cluster'])
-                    clusters.to_csv(os.path.join(self.data_path, 'cluster', 'cluster.csv'), index=False)
+                    clusters.to_csv(os.path.join(self.data_path, 'cluster', f'cluster_{scope}.csv'), index=False)
             again['cluster'] = again['session_id'].map(clusters.set_index('session_id')['cluster'])
             if self.config['clustering']['cluster_sample'] != 0:
                 cluster_idx = self.config['clustering']['cluster_sample'] - 1
                 again = again[again['cluster'] == cluster_idx]
 
             # NOTE: cluster는 추후에 사용할 수 있음
-            again = again.drop(columns=['cluster'])
+            # again = again.drop(columns=['cluster'])
 
         return again
 
@@ -96,6 +96,9 @@ class AgainReader:
 
                 player_bio = self.bio[self.bio['ParticipantID'] == player]
                 player_bio = player_bio.drop(columns=['ParticipantID', 'Metacritic Code', 'Genre'])
+                if player_bio.empty:
+                    continue
+
                 # pads = pd.concat([player_data.iloc[0]] * 3, axis=1).T
                 # player_data = pd.concat([pads, player_data], ignore_index=True)
 
