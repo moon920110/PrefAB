@@ -21,6 +21,7 @@ class PairDataset(Dataset):
         self.x_meta_pairs = []
         self.x_bio = []
         self.y = []
+        self.a_y = []
 
         self.transform = transforms.Compose([
             transforms.Resize(self.config['data']['transform_size']),
@@ -48,6 +49,7 @@ class PairDataset(Dataset):
                     seq = player_data.iloc[idx:idx+self.window_size]  # stack `window_size` frames (0~win_size-1)
                     img_data = [img_path, seq['time_index'].values, seq['time_stamp'].values]
                     y = seq[self.config['train']['label']].values[-1].astype('float32')  # label of the last frame
+                    a_y = seq[self.config['train']['aux_label']].values[-1].astype('float32')  # auxiliary label of the last frame
 
                     seq = seq.loc[:, self.numeric_columns]
                     seq = seq.drop(
@@ -57,11 +59,13 @@ class PairDataset(Dataset):
                     self.x_meta_pairs.append(seq)
                     self.x_bio.append(bio.values)
                     self.y.append(y)
+                    self.a_y.append(a_y)
             else:
                 for idx in range(0, len(player_data)-offset+1):
                     seq = player_data.iloc[idx:idx+offset]  # stack `window_size` frames (0~win_size-1), (4~win_size+win_stride) pair
                     img_data = [img_path, seq['time_index'].values, seq['time_stamp'].values]
                     y = seq[self.config['train']['label']].values[-1]  # label of the last frame
+                    a_y = seq[self.config['train']['aux_label']].values[-1]  # auxiliary label of the last frame
 
                     seq = seq.loc[:, self.numeric_columns]
                     seq = seq.drop(
@@ -70,6 +74,7 @@ class PairDataset(Dataset):
                     self.x_img_pairs.append(img_data)
                     self.x_meta_pairs.append(seq)
                     self.x_bio.append(bio.values)
+                    self.a_y.append(a_y)
                     self.y.append(y)
 
 
@@ -94,6 +99,7 @@ class PairDataset(Dataset):
         meta = self.x_meta_pairs[idx]  # game log data
         y = self.y[idx]  # 0, 0.5, 1 => 0, 1, 2
         bio = self.x_bio[idx]
+        a_y = self.a_y[idx]
 
         img_path, time_indices, time_stamps = img_data
 
@@ -105,7 +111,7 @@ class PairDataset(Dataset):
                      for time_index, time_stamp in zip(time_indices, time_stamps)])
                 # (sequence, height, width, channel) to (sequence, channel, height, width) // open cv BGR format 0~255
 
-            return frames, torch.tensor(meta), torch.tensor(bio), torch.tensor(y)
+            return frames, torch.tensor(meta), torch.tensor(bio), torch.tensor(y), torch.tensor(a_y)
         else:
             with h5py.File(img_path, 'r') as f:
                 # (sequence, height, width, channel)
@@ -123,7 +129,8 @@ class PairDataset(Dataset):
                 main_frames, \
                 torch.tensor(meta[-self.window_size:]), \
                 torch.tensor(bio), \
-                torch.tensor(y)
+                torch.tensor(y), \
+                torch.tensor(a_y)
 
 
 class TestDataset(Dataset):
@@ -136,6 +143,7 @@ class TestDataset(Dataset):
         self.x_img = []
         self.x_meta = []
         self.y = []
+        self.a_y = []
         self.bio = []
         self.player_idx = []
 
@@ -156,7 +164,9 @@ class TestDataset(Dataset):
             for idx in range(0, len(player_data) - self.window_size):
                 seq = player_data.iloc[idx:idx + self.window_size]  # stack `window_size` frames (0~win_size-1), (4~win_size+win_stride) pair
                 img_data = [img_path, seq['time_index'].values, seq['time_stamp'].values]
-                y = seq[self.config['train']['label']].values[-1]
+                y = seq[self.config['test']['label']].values[-1].astype('float32')
+                a_y = seq[self.config['test']['aux_label']].values[-1].astype('float32')
+
                 seq = seq.loc[:, self.numeric_columns]
                 seq = seq.drop(
                     columns=['player_idx', 'pair_rank_label', 'epoch', 'engine_tick', 'time_stamp', 'activity', 'score',
@@ -166,6 +176,7 @@ class TestDataset(Dataset):
                 self.x_meta.append(seq)
                 self.bio.append(bio.values)
                 self.y.append(y)
+                self.a_y.append(a_y)
 
     def sample_player_data(self, size=10):
         p_indices = np.random.choice(len(self.player_idx)-1, size)
@@ -179,6 +190,7 @@ class TestDataset(Dataset):
         meta = self.x_meta[idx]  # game log data per player
         y = self.y[idx]  # [arousal, relative_arousal, mean_arousal]
         bio = self.bio[idx]
+        a_y = self.a_y[idx]
 
         img_path, time_indices, time_stamps = img_data
         with h5py.File(img_path, 'r') as f:
@@ -192,7 +204,8 @@ class TestDataset(Dataset):
         return frames, \
             torch.tensor(meta[:self.window_size]), \
             torch.tensor(bio), \
-            torch.tensor(y)
+            torch.tensor(y), \
+            torch.tensor(a_y)
 
 
 class BioDataset(Dataset):

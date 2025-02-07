@@ -6,6 +6,7 @@ from torch import nn
 from torch.nn.modules.transformer import TransformerEncoder, TransformerEncoderLayer
 
 from network.autoencoder import AutoEncoder
+from network.film import FiLM
 
 
 class Prefab(nn.Module):
@@ -15,8 +16,9 @@ class Prefab(nn.Module):
         self.window_size = config['train']['window_size']
         self.mode = config['train']['mode']
         ext_layers = []
-        fc_layers = []
-        bio_layers = []
+        main_fc_layers = []
+        aux_fc_layers = []
+        d_model = config['train']['d_model']
         self.genre_size = bio_feature_size['genre']
         self.gender_size = bio_feature_size['gender']
         self.play_freq_size = bio_feature_size['play_freq']
@@ -35,20 +37,9 @@ class Prefab(nn.Module):
                 3 +   # platforms (pc, mobile, console)
                 2 * bio_embedding_dim
         )
-        b_dim = bio_total_size
-        while b_dim // 2 > bio_embedding_dim:
-            bio_layers.append(nn.Linear(b_dim, b_dim//2))
-            bio_layers.append(nn.LayerNorm(b_dim//2))
-            bio_layers.append(nn.LeakyReLU())
-            b_dim = b_dim // 2
-        bio_layers.append(nn.Linear(b_dim, bio_embedding_dim))
-        bio_layers.append(nn.LayerNorm(bio_embedding_dim))
-        bio_layers.append(nn.LeakyReLU())
-
-        self.bio_extractor = nn.Sequential(*bio_layers)
+        self.FiLM = FiLM(bio_total_size, d_model)
 
         # transformer setup
-        d_model = config['train']['d_model']
         self.pos_encoder = PositionalEncoding(d_model, dropout=config['train']['dropout'])
         encoder_layers = TransformerEncoderLayer(d_model=d_model, nhead=8, dropout=config['train']['dropout'], batch_first=True)
         self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers=self.config['train']['num_transform_layers'])
@@ -62,8 +53,8 @@ class Prefab(nn.Module):
                 ext_layers.append(nn.LayerNorm(f_dim//2))
                 ext_layers.append(nn.LeakyReLU())
                 f_dim = f_dim // 2
-            ext_layers.append(nn.Linear(f_dim, d_model - meta_feature_size - bio_embedding_dim))
-            ext_layers.append(nn.LayerNorm(d_model - meta_feature_size - bio_embedding_dim))
+            ext_layers.append(nn.Linear(f_dim, d_model - meta_feature_size))
+            ext_layers.append(nn.LayerNorm(d_model - meta_feature_size))
             ext_layers.append(nn.LeakyReLU())
             f_dim = d_model
 
@@ -75,8 +66,8 @@ class Prefab(nn.Module):
                 ext_layers.append(nn.LayerNorm(f_dim // 2))
                 ext_layers.append(nn.LeakyReLU())
                 f_dim = f_dim // 2
-            ext_layers.append(nn.Linear(f_dim, d_model - bio_embedding_dim))
-            ext_layers.append(nn.LayerNorm(d_model - bio_embedding_dim))
+            ext_layers.append(nn.Linear(f_dim, d_model))
+            ext_layers.append(nn.LayerNorm(d_model))
             ext_layers.append(nn.LeakyReLU())
             f_dim = d_model
 
@@ -90,20 +81,27 @@ class Prefab(nn.Module):
                 ext_layers.append(nn.LayerNorm(f_dim * 2))
                 ext_layers.append(nn.LeakyReLU())
                 f_dim = f_dim * 2
-            ext_layers.append(nn.Linear(f_dim, d_model - bio_embedding_dim))
-            ext_layers.append(nn.LayerNorm(d_model - bio_embedding_dim))
+            ext_layers.append(nn.Linear(f_dim, d_model))
+            ext_layers.append(nn.LayerNorm(d_model))
             ext_layers.append(nn.LeakyReLU())
             f_dim = d_model
 
         # last feature extractor setup
         self.extractor = nn.Sequential(*ext_layers)
         while f_dim > 64:
-            fc_layers.append(nn.Linear(f_dim, f_dim//2))
-            fc_layers.append(nn.LayerNorm(f_dim//2))
-            fc_layers.append(nn.ReLU())
+            main_fc_layers.append(nn.Linear(f_dim, f_dim//2))
+            main_fc_layers.append(nn.LayerNorm(f_dim//2))
+            main_fc_layers.append(nn.ReLU())
+
+            aux_fc_layers.append(nn.Linear(f_dim, f_dim//2))
+            aux_fc_layers.append(nn.LayerNorm(f_dim//2))
+            aux_fc_layers.append(nn.ReLU())
+
             f_dim = f_dim // 2
-        fc_layers.append(nn.Linear(f_dim, 1))
-        self.fc = nn.Sequential(*fc_layers)
+        main_fc_layers.append(nn.Linear(f_dim, 1))
+        aux_fc_layers.append(nn.Linear(f_dim, config['clustering']['n_clusters']))
+        self.main_fc = nn.Sequential(*main_fc_layers)
+        self.aux_fc = nn.Sequential(*aux_fc_layers)
 
         self._init_weights()
 
@@ -141,9 +139,9 @@ class Prefab(nn.Module):
         genre_emb = self.genre_embedding(genre)
 
         bio_feature = torch.cat([age_emb, gender_onehot, freq_onehot, platform, gamer_onehot, genre_emb], dim=1)
-        bio_ext = self.bio_extractor(bio_feature)
+        film_gamma, film_beta = self.FiLM(bio_feature)
         # copy bio_ext to match the sequence length
-        bio_ext = bio_ext.unsqueeze(1).repeat(1, self.window_size, 1)
+        # bio_ext = bio_ext.unsqueeze(1).repeat(1, self.window_size, 1)
 
         if self.mode == 'prefab' or self.mode == 'non_ordinal':
             reshaped_img = img.view(-1, *img.shape[2:])  # batch, win_size, c, h, w => batch * win_size, c, h, w
@@ -153,12 +151,11 @@ class Prefab(nn.Module):
             e2 = self.extractor(e.view(-1, e.shape[-1]))
             e2 = e2.view(int(e2.shape[0]/self.window_size), self.window_size, -1)
 
-            z = torch.cat((e2, feature, bio_ext), dim=-1)  # batch, sequence, feature
+            z = torch.cat((e2, feature), dim=-1)  # batch, sequence, feature
             ti = self.pos_encoder(z)
 
             x = self.transformer_encoder(ti)
             avg_pooled = torch.mean(x, dim=1)
-            x = self.fc(avg_pooled)
 
         elif self.mode == 'image':
             reshaped_img = img.view(-1, *img.shape[2:])  # batch, win_size, c, h, w => batch * win_size, c, h, w
@@ -166,28 +163,26 @@ class Prefab(nn.Module):
             e = e.view(int(e.shape[0] / self.window_size), self.window_size, -1)
 
             e2 = self.extractor(e.view(-1, e.shape[-1]))
-            e2 = e2.view(int(e2.shape[0] / self.window_size), self.window_size, -1)
+            z = e2.view(int(e2.shape[0] / self.window_size), self.window_size, -1)
 
-            z = torch.cat((e2, bio_ext), dim=-1)  # batch, sequence, feature
             ti = self.pos_encoder(z)
 
             x = self.transformer_encoder(ti)
             avg_pooled = torch.mean(x, dim=1)
-            x = self.fc(avg_pooled)
 
         else:
-            e = self.extractor(feature)
-            z = torch.cat((e, bio_ext), dim=-1)  # batch, sequence, feature
+            z = self.extractor(feature)
             ti = self.pos_encoder(z)
 
             x = self.transformer_encoder(ti)
             avg_pooled = torch.mean(x, dim=1)
-            x = self.fc(avg_pooled)
             d = None
+        x = self.main_fc(avg_pooled * film_gamma + film_beta)
+        a = self.aux_fc(avg_pooled * film_gamma + film_beta)
 
         if test:
-            return x, d, z
-        return x, d
+            return x, a, d, z
+        return x, a, d
 
 
 

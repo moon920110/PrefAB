@@ -23,24 +23,26 @@ game_name:
   Endless: endless
 
 train:
-  exp: bio_test
+  exp: prefab_bio_film_cluster_aux_TinyCars
   log_dir: log/
   save_dir: log/model
-  mode: prefab  # prefab: full; image: only image; feature: only feature; non_ordinal: non-ordinal
-  label: cluster  # cluster, arousal, pair_rank_label
+  mode: prefab  # prefab: full; image: only image; feature: only feature; non_ordinal: non_ordinal
+  label: pair_rank_label  # cluster, arousal, pair_rank_label
+  aux_label: cluster
   domain: game  # genre, game
   genre: Shooter  # All, Shooter, Platformer, Racing
-  game: TopDown
+  game: TinyCars
   lr: 0.001
   focal_alpha: 1
   focal_gamma: 5
-  epoch: 1000
+  epoch: 60
   num_transform_layers: 1
-  batch_size: 16  # A100 (40G): 24, V100 (32G): 16
+  batch_size: 24  # A100 (40G): 24, V100 (32G): 16
   train_ratio: 0.8
   window_size: 12
   window_stride: 4
   ae_loss_weight: 0.001
+  aux_loss_weight: 0.00001
   output_scale: 10
   dropout: 0.2  # 0.5 is trash
   num_workers: 16
@@ -60,12 +62,14 @@ train:
     backend: nccl
 
 test:
-  exp: prefab-topdown-bio
+  label: arousal  # cluster, arousal, pair_rank_label
+  aux_label: cluster
+  exp: prefab_bio_film_cluster_aux_4
   log_dir: log/test/
   save_dir: log/model
-  sample_size: 5
+  sample_size: 10
   mode: prefab
-  batch_size: 20
+  batch_size: 16
   seed: 1125
 
 clustering:
@@ -80,7 +84,7 @@ clustering:
   visualize: false
   cluster_sample: 0  # 0: all, 1~n: cluster index of 0~n-1
   caching: true
-  load_cache: false
+  load_cache: true
 
 debug:
   activate: false

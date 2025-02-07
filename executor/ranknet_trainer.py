@@ -105,6 +105,7 @@ class RanknetTrainer:
         model.to(self.device)
         ae_criterion = nn.L1Loss().to(self.device)
         rank_criterion = OrdinalCrossEntropyLoss(self.config['train']['cutpoints']).to(self.device)  # FocalLoss(alpha=self.config['train']['focal_alpha'], gamma=self.config['train']['focal_gamma']).to(self.device)
+        aux_criterion = nn.CrossEntropyLoss().to(self.device)
 
         optimizer = torch.optim.Adam(model.parameters(), lr=self.config['train']['lr'])
         # compiled_model = torch.compile(model)
@@ -129,45 +130,51 @@ class RanknetTrainer:
                 train_sampler.set_epoch(epc)
                 self.logger.info(f'[gpu {rank}]train sampler set epoch {epc}')
 
-            for i, (img1, feature1, img2, feature2, bio, label) in tqdm(enumerate(train_loader), desc=f'Training Epoch {epc}'):
+            for i, (img1, feature1, img2, feature2, bio, label, aux_label) in tqdm(enumerate(train_loader), desc=f'Training Epoch {epc}'):
                 img1 = img1.to(self.device)
                 feature1 = feature1.to(self.device)
                 img2 = img2.to(self.device)
                 feature2 = feature2.to(self.device)
                 label = label.to(self.device)
                 bio = bio.to(self.device)
+                aux_label = aux_label.to(self.device)
 
                 l0_cnt += len(label[label == 0])
                 l1_cnt += len(label[label == 1])
                 l2_cnt += len(label[label == 2])
 
                 optimizer.zero_grad()
-                o1, d1 = model(img1, feature1, bio)
-                o2, d2 = model(img2, feature2, bio)
+                o1, a_o1, d1 = model(img1, feature1, bio)
+                o2, a_o2, d2 = model(img2, feature2, bio)
                 o = o2 - o1
 
                 ranknet_loss = rank_criterion(o, label)
+                aux_loss = aux_criterion(a_o1, aux_label) + aux_criterion(a_o2, aux_label)
                 if self.mode != 'feature':
                     ae_loss = ae_criterion(d1, img1.view(-1, *img1.shape[2:])) + ae_criterion(d2, img2.view(-1, *img2.shape[2:]))
                     # ae_loss = 0
-                    loss = ranknet_loss + ae_loss * self.config['train']['ae_loss_weight']
+                    loss = ranknet_loss + ae_loss * self.config['train']['ae_loss_weight'] + aux_loss * self.config['train']['aux_loss_weight']
                 else:
-                    loss = ranknet_loss
+                    loss = ranknet_loss + aux_loss * self.config['train']['aux_loss_weight']
                 loss.backward()
                 optimizer.step()
                 acc, cm_tmp = metric(o, label, self.config['train']['cutpoints'])
+                aux_acc1, _ = metric(a_o1, aux_label, infer_type='classification')
+                aux_acc2, _ = metric(a_o2, aux_label, infer_type='classification')
                 cm += cm_tmp
 
                 if writer:
                     writer.add_scalar(f'train/ranknet_loss', ranknet_loss.item(), epc * len_train_loader + i)
+                    writer.add_scalar(f'train/aux_loss', aux_loss.item(), epc * len_train_loader + i)
                     if self.mode != 'feature':
                         writer.add_scalar(f'train/ae_loss', ae_loss.item(), epc * len_train_loader + i)
                     writer.add_scalar(f'train/accuracy', acc, epc * len_train_loader + i)
+                    writer.add_scalar(f'train/aux_accuracy_1', aux_acc1, epc * len_train_loader + i)
+                    writer.add_scalar(f'train/aux_accuracy_2', aux_acc2, epc * len_train_loader + i)
                     writer.add_scalar(f'train/loss', loss.item(), epc * len_train_loader + i)
                 losses += loss.item()
 
             scheduler.step()
-            total_cnt = l0_cnt + l1_cnt + l2_cnt
             self.logger.info(f'[gpu:{rank}]epoch {epc} avg. loss {losses / len_train_loader:.4f} '
                              f'l0_cnt {l0_cnt} '
                              f'l1_cnt {l1_cnt} '
@@ -190,23 +197,29 @@ class RanknetTrainer:
                 accs = 0
                 cm = np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]])
                 d1, d2 = None, None
-                for i, (img1, feature1, img2, feature2, bio, label) in tqdm(enumerate(val_loader), desc=f'Evaluation'):
+                for i, (img1, feature1, img2, feature2, bio, label, aux_label) in tqdm(enumerate(val_loader), desc=f'Evaluation'):
                     img1 = img1.to(self.device)
                     feature1 = feature1.to(self.device)
                     img2 = img2.to(self.device)
                     feature2 = feature2.to(self.device)
                     label = label.to(self.device)
                     bio = bio.to(self.device)
+                    aux_label = aux_label.to(self.device)
 
-                    o1, d1 = model(img1, feature1, bio)
-                    o2, d2 = model(img2, feature2, bio)
+                    o1, a_o1, d1 = model(img1, feature1, bio)
+                    o2, a_o2, d2 = model(img2, feature2, bio)
                     o = o2 - o1
 
                     acc, cm_tmp = metric(o, label, self.config['train']['cutpoints'])
+                    aux_acc1, _ = metric(a_o1, aux_label, infer_type='classification')
+                    aux_acc2, _ = metric(a_o2, aux_label, infer_type='classification')
+
                     cm += cm_tmp
                     accs += acc
                     if writer:
                         writer.add_scalar(f'val/accuracy', acc, epc * len_val_loader + i)
+                        writer.add_scalar(f'val/aux_accuracy_1', aux_acc1, epc * len_val_loader + i)
+                        writer.add_scalar(f'val/aux_accuracy_2', aux_acc2, epc * len_val_loader + i)
 
                 avg_acc = accs / len_val_loader
                 if writer:
@@ -233,11 +246,13 @@ class RanknetTrainer:
                                      f'ranknet_{self.config["train"]["exp"]}_best.pth')
                     )
 
-        self._test_per_player(model, 10, writer)
+        if rank == 0:
+            self._test_per_player(10, writer)
         if writer is not None:
             writer.close()
 
-    def _test_per_player(self, model, size, writer):
+    def _test_per_player(self, size, writer):
+        model = Prefab(self.config, self.meta_feature_size, self.bio_features_size)
         # load best model
         model.load_state_dict(
             torch.load(
@@ -249,49 +264,61 @@ class RanknetTrainer:
         model.eval()
 
         indices = self.test_dataset.sample_player_data(size)
-        dtw_distances = []
-        for i, idx in tqdm(enumerate(indices), desc='Reconstructing Graphs'):
-            start_idx = self.test_dataset.player_idx[idx]
-            end_idx = self.test_dataset.player_idx[idx + 1]
 
-            outputs = []
-            labels = []
-            imgs = []
-            features = []
-            bios = []
-            for data_idx in range(start_idx, end_idx):
-                img, feature, bio, y = self.test_dataset[data_idx]
-                imgs.append(img)
-                features.append(feature)
-                bios.append(bio)
-                labels.append(y)
+        with torch.no_grad():
+            metadata = []
+            embeddigns = []
+            for i, idx in tqdm(enumerate(indices), desc='Reconstructing Graphs'):
+                start_idx = self.test_dataset.player_idx[idx]
+                end_idx = self.test_dataset.player_idx[idx + 1]
 
-                if len(imgs) == self.batch_size or data_idx == end_idx - 1:
-                    imgs = torch.stack(imgs).to(self.device)
-                    features = torch.stack(features).to(self.device)
-                    bios = torch.stack(bios).to(self.device)
-                    o, _ = model(imgs, features, bios)
-                    o = o.cpu().detach().numpy()
-                    outputs.extend(o)
+                outputs = []
+                labels = []
+                imgs = []
+                features = []
+                bios = []
 
-                    imgs = []
-                    features = []
-                    bios = []
+                for data_idx in range(start_idx, end_idx):
+                    img, feature, bio, y, cluster = self.test_dataset[data_idx]
+                    imgs.append(img)
+                    features.append(feature)
+                    bios.append(bio)
+                    labels.append(y)
 
-            # normalize output to 0~1
-            outputs = np.array(outputs).squeeze().squeeze()
-            outputs = (outputs - outputs.min()) / (outputs.max() - outputs.min())
-            # dtw_distances.append(dtw.dtw(outputs, np.array(labels)).distance)
+                    metadata.append([bio[:, 0], bio[:, 1], bio[:, 2],bio[:, 3], bio[:, 4], bio[:, 5], bio[:, 6], bio[:, 7], cluster])
 
-            for ii, (o, y) in enumerate(zip(outputs, labels)):
-                if writer:
-                    writer.add_scalars(f'test/player_{idx}',
-                                       {'predict': o,
-                                        'arousal': y,
-                                       },
-                                       ii)
+                    if len(imgs) == self.batch_size or data_idx == end_idx - 1:
+                        imgs = torch.stack(imgs).to(self.device)
+                        features = torch.stack(features).to(self.device)
+                        bios = torch.stack(bios).to(self.device)
 
-        # dtw_distances = np.array(dtw_distances)
-        # if writer:
-        #     writer.add_scalar(f'test/dtw_mean', dtw_distances.mean(), epc)
-        #     writer.add_scalar(f'test/dtw_std', dtw_distances.std(), epc)
+                        o, _, _, z = model(imgs, features, bios, test=True)
+                        o = o.cpu().detach().numpy()
+                        outputs.extend(o)
+
+                        flat_z = z.view(z.size(0), -1).cpu().detach().numpy()
+                        embeddigns.append(flat_z)
+
+                        imgs = []
+                        features = []
+                        bios = []
+
+                # normalize output to 0~1
+                outputs = np.array(outputs).squeeze().squeeze()
+                outputs = (outputs - outputs.min()) / (outputs.max() - outputs.min())
+
+                for ii, (o, y) in enumerate(zip(outputs, labels)):
+                    if writer:
+                        writer.add_scalars(f'test/player_{idx}',
+                                           {'predict': o,
+                                            'arousal': y,
+                                           },
+                                           ii)
+
+            embeddigns = np.vstack(embeddigns)
+            writer.add_embedding(
+                torch.tensor(embeddigns),
+                metadata,
+                metadata_header=['Age', 'Gender', 'Frequency', 'Gamer', 'PC', 'Mobile', 'Console', 'Genre', 'Cluster'],
+            )
+
