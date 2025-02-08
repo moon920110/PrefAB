@@ -25,7 +25,6 @@ class Prefab(nn.Module):
         self.gamer_size = bio_feature_size['gamer']
 
         bio_embedding_dim = config['train']['bio_embedding_dim']
-        f_dim = config['train']['f_dim']
 
         # bio extractor setup
         self.age_embedding = nn.Linear(1, bio_embedding_dim)
@@ -47,6 +46,7 @@ class Prefab(nn.Module):
         # autoencoder and feature extractor setup
         if self.mode == 'prefab' or self.mode == 'non_ordinal':
             self.autoencoder = AutoEncoder()
+            f_dim = self._compute_f_dim()
 
             while f_dim // 2 > d_model:
                 ext_layers.append(nn.Linear(f_dim, f_dim//2))
@@ -60,6 +60,7 @@ class Prefab(nn.Module):
 
         elif self.mode == 'image':  # image only
             self.autoencoder = AutoEncoder()
+            f_dim = self._compute_f_dim()
 
             while f_dim // 2 > d_model:
                 ext_layers.append(nn.Linear(f_dim, f_dim // 2))
@@ -122,6 +123,12 @@ class Prefab(nn.Module):
                 init.constant_(m.weight, 1.0)
                 init.constant_(m.bias, 0.0)
 
+    def _compute_f_dim(self):
+        dummy_input = torch.randn(1, 3, *self.config['data']['transform_size'])  # Adjust as needed
+        with torch.no_grad():
+            latent_vector, _  = self.autoencoder(dummy_input)
+        return latent_vector.view(1, -1).shape[1]  # Flatten and get size
+
     def forward(self, img, feature, bio, test=False):
         bio = bio.squeeze(1)
 
@@ -151,8 +158,8 @@ class Prefab(nn.Module):
             e2 = self.extractor(e.view(-1, e.shape[-1]))
             e2 = e2.view(int(e2.shape[0]/self.window_size), self.window_size, -1)
 
-            z = torch.cat((e2, feature), dim=-1)  # batch, sequence, feature
-            ti = self.pos_encoder(z)
+            f_z = torch.cat((e2, feature), dim=-1)  # batch, sequence, feature
+            ti = self.pos_encoder(f_z)
 
             x = self.transformer_encoder(ti)
             avg_pooled = torch.mean(x, dim=1)
@@ -163,22 +170,23 @@ class Prefab(nn.Module):
             e = e.view(int(e.shape[0] / self.window_size), self.window_size, -1)
 
             e2 = self.extractor(e.view(-1, e.shape[-1]))
-            z = e2.view(int(e2.shape[0] / self.window_size), self.window_size, -1)
+            f_z = e2.view(int(e2.shape[0] / self.window_size), self.window_size, -1)
 
-            ti = self.pos_encoder(z)
+            ti = self.pos_encoder(f_z)
 
             x = self.transformer_encoder(ti)
             avg_pooled = torch.mean(x, dim=1)
 
         else:
-            z = self.extractor(feature)
-            ti = self.pos_encoder(z)
+            f_z = self.extractor(feature)
+            ti = self.pos_encoder(f_z)
 
             x = self.transformer_encoder(ti)
             avg_pooled = torch.mean(x, dim=1)
             d = None
-        x = self.main_fc(avg_pooled * film_gamma + film_beta)
-        a = self.aux_fc(avg_pooled * film_gamma + film_beta)
+        z = avg_pooled * film_gamma + film_beta
+        x = self.main_fc(z)
+        a = self.aux_fc(z)
 
         if test:
             return x, a, d, z
