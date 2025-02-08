@@ -47,15 +47,17 @@ class AgainReader:
 
         again['pair_rank_label'] = pair_rank_label
         if self.config['clustering']['activate']:
-            if self.config['clustering']['load_cache']:
-                clusters = pd.read_csv(os.path.join(self.data_path, 'cluster', f'cluster_{scope}.csv'))
-            else:
+            cluster_data_path = os.path.join(self.data_path, 'cluster', f'cluster_{scope}.csv')
+            if not os.path.exists(cluster_data_path):
+                print("compute new cluster")
                 clusters = get_dtw_cluster(again, self.config)
                 if self.config['clustering']['caching']:
                     if not os.path.exists(os.path.join(self.data_path, 'cluster')):
                         os.mkdir(os.path.join(self.data_path, 'cluster'))
                     clusters = pd.DataFrame(clusters.items(), columns=['session_id', 'cluster'])
-                    clusters.to_csv(os.path.join(self.data_path, 'cluster', f'cluster_{scope}.csv'), index=False)
+                    clusters.to_csv(cluster_data_path, index=False)
+            else:
+                clusters = pd.read_csv(cluster_data_path)
             again['cluster'] = again['session_id'].map(clusters.set_index('session_id')['cluster'])
             if self.config['clustering']['cluster_sample'] != 0:
                 cluster_idx = self.config['clustering']['cluster_sample'] - 1
