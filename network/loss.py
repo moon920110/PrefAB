@@ -27,17 +27,25 @@ class OrdinalCrossEntropyLoss(nn.Module):
     def __init__(self, cutpoints, reduction='mean'):
         super(OrdinalCrossEntropyLoss, self).__init__()
         self.reduction = reduction
+        # self.cutpoints = nn.Parameter(torch.linspace(-3, 3, 2), requires_grad=True)# cutpoints
         self.cutpoints = cutpoints
 
+    def get_cutpoints(self):
+        # return torch.sort(self.cutpoints)[0]
+        return self.cutpoints
+
     def forward(self, y_pred, y_true):
+        cutpoints = self.get_cutpoints()
+
+
         y_true_0 = y_true == 0
-        y_pred_0 = torch.clamp(torch.sigmoid(self.cutpoints[0] - y_pred), min=1e-7, max=1-1e-7)
+        y_pred_0 = torch.clamp(torch.sigmoid(cutpoints[0] - y_pred), min=1e-7, max=1-1e-7)
 
         y_true_1 = y_true == 1
-        y_pred_1 = torch.clamp(torch.sigmoid(self.cutpoints[1] - y_pred) - torch.sigmoid(self.cutpoints[0] - y_pred), min=1e-7, max=1-1e-7)
+        y_pred_1 = torch.clamp(torch.sigmoid(cutpoints[1] - y_pred) - torch.sigmoid(cutpoints[0] - y_pred), min=1e-7, max=1-1e-7)
 
         y_true_2 = y_true == 2
-        y_pred_2 = torch.clamp(1 - torch.sigmoid(self.cutpoints[1] - y_pred), min=1e-7, max=1-1e-7)
+        y_pred_2 = torch.clamp(1 - torch.sigmoid(cutpoints[1] - y_pred), min=1e-7, max=1-1e-7)
 
         if self.reduction == 'sum':
             loss_0 = -torch.log(y_pred_0[y_true_0]).sum()

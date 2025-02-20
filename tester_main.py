@@ -46,7 +46,7 @@ def find_peak_demo():
 
 
 def post_analysis_demo(case='None'):
-    dirs = [['log/prefab-topdown', True]]
+    dirs = [['/home/jovyan/projects/PrefAB/log/prefab_bio_film_cluster_aux_TinyCars', False]]
     for item in dirs:
         # inflection_comparison(dir)
         if case == 'Comparison':
@@ -84,10 +84,10 @@ def tsne_demo():
 
     if not os.path.exists(config['test']['log_dir']):
         os.makedirs(config['test']['log_dir'])
-    config['test']['exp'] = create_new_filename(config['test']['log_dir'], config['test']['exp'])
+    config['test']['new_exp'] = create_new_filename(config['test']['log_dir'], config['test']['exp'])
 
-    if not os.path.exists(os.path.join(config['test']['log_dir'], f"{config['test']['exp']}")):
-        os.makedirs(os.path.join(config['test']['log_dir'], f"{config['test']['exp']}"))
+    if not os.path.exists(os.path.join(config['test']['log_dir'], f"{config['test']['new_exp']}")):
+        os.makedirs(os.path.join(config['test']['log_dir'], f"{config['test']['new_exp']}"))
 
     dataset, numeric_columns, bio_features_size = AgainReader(config).prepare_sequential_ranknet_dataset()
     train_size = int(len(dataset) * config['train']['train_ratio'])
@@ -100,6 +100,7 @@ def tsne_demo():
 
     train_dataset = PairDataset(train_samples, numeric_columns, bio_features_size, config)
     test_dataset = TestDataset(test_samples, numeric_columns, config)
+    # test_dataset = TestDataset(train_samples, numeric_columns, config)
 
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
@@ -109,7 +110,7 @@ def tsne_demo():
     sh.setFormatter(formatter)
     logger.addHandler(sh)
 
-    fh = logging.FileHandler(os.path.join(config['test']['log_dir'], f"{config['test']['exp']}", 'log.log'))
+    fh = logging.FileHandler(os.path.join(config['test']['log_dir'], f"{config['test']['new_exp']}", 'log.log'))
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 
@@ -121,5 +122,5 @@ def tsne_demo():
 
 if __name__ == '__main__':
     # post_analysis_demo('Comparison')
-    # tsne_demo()
-    dtw_cluster_demo()
+    tsne_demo()
+    # dtw_cluster_demo()

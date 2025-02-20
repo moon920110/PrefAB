@@ -11,6 +11,7 @@ from sklearn.metrics import confusion_matrix, accuracy_score
 from sklearn.manifold import TSNE
 
 from network.prefab import Prefab
+from utils.utils import normalize
 
 
 class RanknetTester:
@@ -28,32 +29,35 @@ class RanknetTester:
         # torch.set_float32_matmul_precision('high')
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.tsne = TSNE(n_components=2, random_state=config['test']['seed'])
 
-    def test(self):
-        writer = SummaryWriter(
-            log_dir=os.path.join(self.config['test']['log_dir'],
-                                 f"{self.config['test']['exp']}"
-                                 )
-        )
-        label_path = os.path.join(self.config['test']['log_dir'], f"{self.config['test']['exp']}", 'metadata.tsv')
+    def test(self, writer=None, model_path=None, cutpoints=None):
+        if writer is None:
+            test_writer = SummaryWriter(
+                log_dir=os.path.join(self.config['test']['log_dir'],
+                                     f"{self.config['test']['new_exp']}"
+                                     )
+            )
+            label_path = os.path.join(self.config['test']['log_dir'], f"{self.config['test']['new_exp']}", 'metadata.tsv')
+            self.logger.info(f'Metadata will be saved at {label_path}')
+        else:
+            test_writer = writer
 
         model = Prefab(self.config, self.meta_feature_size, self.bio_features_size)
-        model.load_state_dict(
-            torch.load(
-                os.path.join(self.config['test']['save_dir'],
-                             f'ranknet_{self.config["test"]["exp"]}_best.pth')
-            )
-        )
+
+        if model_path is None:
+            model_path = os.path.join(self.config['test']['save_dir'], f'ranknet_{self.config["test"]["exp"]}_best.pth')
+
+        if cutpoints is None:
+            cutpoints = self.config['test']['cutpoints']
+
+        model.load_state_dict(torch.load(model_path))
         model.to(self.device)
         model.eval()
 
-        self.logger.info(f'Model loaded from {self.config["test"]["save_dir"]}/{self.config["test"]["exp"]}_best.pth')
-        self.logger.info(f'Metadata will be saved at {label_path}')
+        self.logger.info(f'Model loaded from {model_path}')
         with torch.no_grad():
             # model save if validation accuracy is the best
             indices = self.test_dataset.sample_player_data(self.config['test']['sample_size'])
-            tsne = TSNE(n_components=2, random_state=self.config['test']['seed'])
             metadata = []
             embeddings = []
 
@@ -66,7 +70,7 @@ class RanknetTester:
                 imgs = []
                 features = []
                 bios = []
-                batch_idx = 0
+
                 for data_idx in tqdm(range(start_idx, end_idx), desc=f'Reconstructing Graphs {i}/{len(indices)}'):
                     img, feature, bio, y, cluster = self.test_dataset[data_idx]
                     imgs.append(img)
@@ -74,10 +78,9 @@ class RanknetTester:
                     bios.append(bio)
                     labels.append(y)
 
-                    metadata.append([bio[:, 0], bio[:, 1], bio[:, 2],bio[:, 3], bio[:, 4], bio[:, 5], bio[:, 6], bio[:, 7], cluster])
+                    metadata.append([f'{y:.2f}', cluster])
 
                     if len(imgs) == self.batch_size or data_idx == end_idx - 1:
-                        batch_idx += 1
                         imgs = torch.stack(imgs).to(self.device)
                         features = torch.stack(features).to(self.device)
                         bios = torch.stack(bios).to(self.device)
@@ -93,30 +96,46 @@ class RanknetTester:
                         features = []
                         bios = []
 
-                # normalize output to 0~1
                 outputs = np.array(outputs).squeeze().squeeze()
-                outputs = (outputs - outputs.min()) / (outputs.max() - outputs.min())
-                # dtw_distances.append(dtw.dtw(outputs, np.array(labels)).distance)
-                # tsne_embeddings = tsne.fit_transform(embeddings)
+                relative_outputs = []
+                stride = self.config['train']['window_stride']
+                rel_graph = 0
+                for o_idx in range(len(outputs) - stride):
+                    if o_idx == 0:
+                        rel_val = 0
+                    else:
+                        rel_val = outputs[o_idx + stride] - outputs[o_idx]
 
-                for ii, (o, y) in enumerate(zip(outputs, labels)):
-                    if writer:
-                        writer.add_scalars(f'test/player_{idx}',
+                    if rel_val < cutpoints[0]:
+                        rel_graph += -1
+                    elif cutpoints[0] < rel_val < cutpoints[1]:
+                        rel_graph += 0
+                    else:
+                        rel_graph += 1
+
+                    relative_outputs.append(rel_graph)
+                relative_outputs.extend([0, 0, 0, 0])
+                relative_outputs = np.array(relative_outputs)
+
+                # normalize output to 0~1
+                outputs = normalize(outputs)
+                relative_outputs = normalize(relative_outputs)
+
+                for ii, (o, y, ro) in enumerate(zip(outputs, labels, relative_outputs)):
+                    if test_writer:
+                        test_writer.add_scalars(f'test/player_{idx}',
                                            {'predict': o,
+                                            'predict_rel': ro,
                                             'arousal': y,
                                             },
                                            ii)
 
-                # dtw_distances = np.array(dtw_distances)
-                # if writer:
-                #     writer.add_scalar(f'test/dtw_mean', dtw_distances.mean(), epc)
-                #     writer.add_scalar(f'test/dtw_std', dtw_distances.std(), epc)
             embeddings = np.vstack(embeddings)
-            writer.add_embedding(
+            test_writer.add_embedding(
                 torch.tensor(embeddings),
-                metadata_header=['Age', 'Gender', 'Frequency', 'Gamer', 'PC', 'Mobile', 'Console', 'Genre', 'Cluster'],
-                metadata=metadata,
-                # tag=f't-SNE Embeddings {i}',
+                metadata,
+                metadata_header=['Arousal', 'Cluster'],
             )
-        if writer is not None:
-            writer.close()
+
+        if writer is None:
+            test_writer.close()

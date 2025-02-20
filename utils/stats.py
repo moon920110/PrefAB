@@ -122,6 +122,7 @@ def inflection_comparison(root, show=False, epoch=False):
         log_dirs = glob.glob(os.path.join(root, 'test_epc[5-9][0-9]*'))  # recent 10 epochs (epoch 60)
     else:
         log_dirs = glob.glob(os.path.join(root, 'test_*'))
+    print(f'root: {root} log_dirs: {log_dirs}')
     log_dict = {}
     for log_dir in log_dirs:
         dir_name = log_dir.split('/')[-1]

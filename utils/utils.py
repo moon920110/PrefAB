@@ -49,3 +49,8 @@ def metric(y_pred, y_true, cutpoints=None, infer_type='ranknet'):
         acc = accuracy_score(_y_true, _y_pred)
         cm = confusion_matrix(_y_true, _y_pred, labels=[0, 1, 2, 3])
         return acc, cm
+
+
+def normalize(val: np.ndarray) -> np.ndarray:
+    return (val - val.min()) / (val.max() - val.min())
+
