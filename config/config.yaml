@@ -23,7 +23,7 @@ game_name:
   Endless: endless
 
 train:
-  exp: test # prefab_bio_film_cluster_aux_TinyCars
+  exp: prefab_test
   log_dir: log/
   save_dir: log/model
   mode: prefab  # prefab: full; image: only image; feature: only feature; non_ordinal: non_ordinal
@@ -32,23 +32,22 @@ train:
   domain: game  # genre, game
   genre: Shooter  # All, Shooter, Platformer, Racing
   game: TinyCars
-  lr: 0.001
+  lr: 0.0001
   focal_alpha: 1
   focal_gamma: 5
   epoch: 60
-  num_transform_layers: 1
+  num_transform_layers: 6
   batch_size: 20  # A100 (40G): 24, V100 (32G): 16
   train_ratio: 0.8
   window_size: 12
   window_stride: 4
   ae_loss_weight: 0.001
-  aux_loss_weight: 0.00001
-  output_scale: 10
-  dropout: 0.2  # 0.5 is trash
+  aux_loss_weight: 0.01
+  dropout: 0.4  # 0.5 is trash
   num_workers: 16
   bio_embedding_dim: 4
   d_model: 200
-  schedule: 30
+  schedule: 20
   data_balancing: true
   cutpoints: [-1, 1]
   seed: 1125
@@ -63,13 +62,14 @@ train:
 test:
   label: arousal  # cluster, arousal, pair_rank_label
   aux_label: cluster
-  exp: prefab_bio_film_cluster_aux_4
+  exp: prefab_test_6
   log_dir: log/test/
   save_dir: log/model
   sample_size: 10
   mode: prefab
   batch_size: 16
   seed: 1125
+  cutpoints: [-1, 1]
 
 clustering:
   activate: true
