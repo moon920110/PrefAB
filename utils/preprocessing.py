@@ -207,4 +207,5 @@ def cleaning_logs(raw_path, dataset_name='Shooter', game='TopDown'):
 
 
 if '__main__' == __name__:
-	print(cleaning_logs('../data/log.csv'))
+	result = cleaning_logs('../data/log.csv')
+	result.to_csv('../data/cleaned_log.csv', index=False)

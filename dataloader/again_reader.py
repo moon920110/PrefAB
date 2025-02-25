@@ -12,14 +12,17 @@ class AgainReader:
         self.config = config
         self.logger = logger
 
+        again_file_name = config["data"]["again_file"]
+        bio_file_name = config["data"]["bio_file"]
+
         if self.logger is not None:
-            self.logger.info(f'data from {os.path.join(self.data_path, "clean_data", "clean_data.csv")}')
-            self.logger.info(f'bio data from {os.path.join(self.data_path, "raw_data", "biographical_data_with_genre.csv")}')
+            self.logger.info(f'data from {os.path.join(self.data_path, "clean_data", again_file_name)}')
+            self.logger.info(f'bio data from {os.path.join(self.data_path, "raw_data", bio_file_name)}')
         # read csv without row index
-        self.again = pd.read_csv(os.path.join(self.data_path, 'clean_data', 'clean_data.csv'),
+        self.again = pd.read_csv(os.path.join(self.data_path, 'clean_data', again_file_name),
                                  encoding='utf-8',
                                  low_memory=False)
-        self.bio = pd.read_csv(os.path.join(self.data_path, 'raw_data', 'biographical_data_with_genre.csv'),
+        self.bio = pd.read_csv(os.path.join(self.data_path, 'raw_data', bio_file_name),
                                encoding='utf-8',
                                low_memory=False)
         self.again.columns = [col.split(']')[-1] for col in self.again.columns]

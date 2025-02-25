@@ -3,6 +3,8 @@ description: |
 
 data:
   path: /home/jovyan/data/AGAIN
+  again_file: clean_data.csv  # 피험자 데이터로 바꾸면 됨 p{n}_topdown_s{m}.csv
+  bio_file: biographical_data_with_genre.csv # 피험자 데이터로 바꾸면 됨 p{n}_topdown_s{m}_bio.csv
 #  path: data
   vision:
     video: videos_mp4
@@ -23,7 +25,7 @@ game_name:
   Endless: endless
 
 train:
-  exp: prefab_test
+  exp: prefab_v2_solid
   log_dir: log/
   save_dir: log/model
   mode: prefab  # prefab: full; image: only image; feature: only feature; non_ordinal: non_ordinal
@@ -31,7 +33,7 @@ train:
   aux_label: cluster
   domain: game  # genre, game
   genre: Shooter  # All, Shooter, Platformer, Racing
-  game: TinyCars
+  game: Solid
   lr: 0.0001
   focal_alpha: 1
   focal_gamma: 5
@@ -43,7 +45,7 @@ train:
   window_stride: 4
   ae_loss_weight: 0.001
   aux_loss_weight: 0.01
-  dropout: 0.4  # 0.5 is trash
+  dropout: 0.2  # 0.5 is trash
   num_workers: 16
   bio_embedding_dim: 4
   d_model: 200
@@ -62,7 +64,7 @@ train:
 test:
   label: arousal  # cluster, arousal, pair_rank_label
   aux_label: cluster
-  exp: prefab_test_6
+  exp: regression_test
   log_dir: log/test/
   save_dir: log/model
   sample_size: 10
