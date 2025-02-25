@@ -1,14 +1,9 @@
 import os
 
-import dtw
 import torch
 import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
-from sklearn.metrics import confusion_matrix, accuracy_score
-from sklearn.manifold import TSNE
 
 from network.prefab import Prefab
 from utils.utils import normalize
@@ -30,7 +25,7 @@ class RanknetTester:
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    def test(self, writer=None, model_path=None, cutpoints=None):
+    def test(self, writer=None, model_path=None):
         if writer is None:
             test_writer = SummaryWriter(
                 log_dir=os.path.join(self.config['test']['log_dir'],
@@ -46,9 +41,6 @@ class RanknetTester:
 
         if model_path is None:
             model_path = os.path.join(self.config['test']['save_dir'], f'ranknet_{self.config["test"]["exp"]}_best.pth')
-
-        if cutpoints is None:
-            cutpoints = self.config['test']['cutpoints']
 
         model.load_state_dict(torch.load(model_path))
         model.to(self.device)
@@ -96,36 +88,14 @@ class RanknetTester:
                         features = []
                         bios = []
 
-                outputs = np.array(outputs).squeeze().squeeze()
-                relative_outputs = []
-                stride = self.config['train']['window_stride']
-                rel_graph = 0
-                for o_idx in range(len(outputs) - stride):
-                    if o_idx == 0:
-                        rel_val = 0
-                    else:
-                        rel_val = outputs[o_idx + stride] - outputs[o_idx]
-
-                    if rel_val < cutpoints[0]:
-                        rel_graph += -1
-                    elif cutpoints[0] < rel_val < cutpoints[1]:
-                        rel_graph += 0
-                    else:
-                        rel_graph += 1
-
-                    relative_outputs.append(rel_graph)
-                relative_outputs.extend([0, 0, 0, 0])
-                relative_outputs = np.array(relative_outputs)
-
                 # normalize output to 0~1
+                outputs = np.array(outputs).squeeze().squeeze()
                 outputs = normalize(outputs)
-                relative_outputs = normalize(relative_outputs)
 
-                for ii, (o, y, ro) in enumerate(zip(outputs, labels, relative_outputs)):
+                for ii, (o, y) in enumerate(zip(outputs, labels)):
                     if test_writer:
                         test_writer.add_scalars(f'test/player_{idx}',
                                            {'predict': o,
-                                            'predict_rel': ro,
                                             'arousal': y,
                                             },
                                            ii)

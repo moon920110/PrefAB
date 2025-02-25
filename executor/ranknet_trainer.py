@@ -14,7 +14,6 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader, random_split
 from torch.utils.data.distributed import DistributedSampler
-from sklearn.metrics import confusion_matrix, accuracy_score
 
 from dataloader.distributedWeightedSampler import DistributedWeightedSampler, WeightedSampler
 from network.prefab import Prefab
@@ -252,7 +251,7 @@ class RanknetTrainer:
                     )
 
         if rank == 0:
-            self.tester.test(writer, self.save_path, rank_criterion.get_cutpoints())
+            self.tester.test(writer, self.save_path)
 
         if writer is not None:
             writer.close()
