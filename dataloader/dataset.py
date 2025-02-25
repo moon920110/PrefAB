@@ -49,7 +49,7 @@ class PairDataset(Dataset):
                     seq = player_data.iloc[idx:idx+self.window_size]  # stack `window_size` frames (0~win_size-1)
                     img_data = [img_path, seq['time_index'].values, seq['time_stamp'].values]
                     y = seq[self.config['train']['label']].values[-1].astype('float32')  # label of the last frame
-                    a_y = seq[self.config['train']['aux_label']].values[-1].astype('float32')  # auxiliary label of the last frame
+                    a_y = seq[self.config['train']['aux_label']].values[-1]  # auxiliary label of the last frame
 
                     seq = seq.loc[:, self.numeric_columns]
                     seq = seq.drop(
