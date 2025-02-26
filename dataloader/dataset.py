@@ -182,6 +182,9 @@ class TestDataset(Dataset):
         p_indices = np.random.choice(len(self.player_idx)-1, size)
         return p_indices
 
+    def get_meta_feature_size(self):
+        return self.x_meta[0].shape[-1]
+
     def __len__(self):
         return len(self.y)
 

@@ -10,20 +10,23 @@ from utils.utils import normalize
 
 
 class RanknetTester:
-    def __init__(self, dataset, testset, config, logger):
+    def __init__(self, testset, bio_feature_size, config, logger):
         self.config = config
         self.logger = logger
         self.window_size = config['train']['window_size']
         self.mode = config['train']['mode']
         self.batch_size = config['test']['batch_size']
 
-        self.meta_feature_size = dataset.get_meta_feature_size()
-        self.bio_features_size = dataset.bio_features_size
+        self.meta_feature_size = testset.get_meta_feature_size()
+        self.bio_features_size = bio_feature_size
         self.test_dataset = testset
 
         # torch.set_float32_matmul_precision('high')
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    def inference(self):
+        pass
 
     def test(self, writer=None, model_path=None):
         if writer is None:
