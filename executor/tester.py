@@ -26,7 +26,47 @@ class RanknetTester:
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def inference(self):
-        pass
+        model = Prefab(self.config, self.meta_feature_size, self.bio_features_size)
+        model_path = os.path.join(self.config['data']['path'], self.config['experiment']['model'])
+        model.load_state_dict(torch.load(model_path))
+        model.to(self.device)
+        model.eval()
+        self.logger.info(f'Model loaded from {model_path}')
+
+        with torch.no_grad():
+            start_idx = 0
+            end_idx = len(self.test_dataset)
+
+            outputs = []
+            labels = []
+            imgs = []
+            features = []
+            bios = []
+
+            for data_idx in tqdm(range(start_idx, end_idx), desc=f'Reconstructing the Arousal Graph'):
+                img, feature, bio, _, _ = self.test_dataset[data_idx]
+                imgs.append(img)
+                features.append(feature)
+                bios.append(bio)
+
+                if len(imgs) == self.batch_size or data_idx == end_idx - 1:
+                    imgs = torch.stack(imgs).to(self.device)
+                    features = torch.stack(features).to(self.device)
+                    bios = torch.stack(bios).to(self.device)
+
+                    o, _, _, _ = model(imgs, features, bios, test=True)
+                    o = o.cpu().detach().numpy()
+                    outputs.extend(o)
+
+                    imgs = []
+                    features = []
+                    bios = []
+
+            # normalize output to 0~1
+            outputs = np.array(outputs).squeeze().squeeze()
+            outputs = normalize(outputs)
+
+        return outputs
 
     def test(self, writer=None, model_path=None):
         if writer is None:
@@ -51,7 +91,6 @@ class RanknetTester:
 
         self.logger.info(f'Model loaded from {model_path}')
         with torch.no_grad():
-            # model save if validation accuracy is the best
             indices = self.test_dataset.sample_player_data(self.config['test']['sample_size'])
             metadata = []
             embeddings = []

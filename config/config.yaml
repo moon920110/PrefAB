@@ -27,6 +27,7 @@ experiment:
   session: s1
   game: TopDown
   dataset_name: Shooter
+  model: model/prefab_v2_solid
 
 train:
   exp: prefab_v2_solid

@@ -51,10 +51,6 @@ def parse_images_from_video_by_timestamp(data, video_full_path, video_out_path, 
     cap.release()
 
 
-def parse_custom_images(video_path, out_dir, again, config):
-    pass
-
-
 def parse_AGAIN_images(again, config, logger):
     video_path = os.path.join(config['data']['path'], config['data']['vision']['video'])
     out_dir = os.path.join(config['data']['path'], config['data']['vision']['frame'])
