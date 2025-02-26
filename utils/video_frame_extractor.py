@@ -1,12 +1,28 @@
 import os
-
 import argparse
 import yaml
 from tqdm import tqdm
 import h5py
 import cv2
+import subprocess
 
 from dataloader.again_reader import AgainReader
+
+
+def cut_video(input_video, start, end, output_video):
+    command = [
+        'ffmpeg',
+        '-i', input_video,  # 입력 영상 파일
+        '-ss', str(start),  # 시작 시간 (초 단위)
+        '-to', str(end),  # 끝 시간 (초 단위)
+        '-c:v', 'libx264',  # 비디오 코덱 설정
+        '-c:a', 'aac',  # 오디오 코덱 설정
+        '-strict', 'experimental',  # FFmpeg 설정 (필요한 경우)
+        '-y',  # 덮어쓰기 옵션
+        output_video
+    ]
+
+    subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
 def parse_images_from_video_by_timestamp(data, video_full_path, video_out_path, transform=False, compression='gzip', compression_level=9):
