@@ -6,8 +6,8 @@ import yaml
 import torch
 
 from utils.stats import find_significant_peaks_and_valleys, inflection_comparison, get_dtw_cluster, reconstruct_state_via_interpolation
-from utils.video_frame_extractor import parse_images_from_video_by_timestamp
-from utils.utils import create_new_filename
+from utils.video_frame_extractor import parse_AGAIN_images
+from utils.utils import create_new_filename, h5reader
 from dataloader.dataset import PairDataset, TestDataset
 from dataloader.again_reader import AgainReader
 from executor.tester import RanknetTester
@@ -61,16 +61,15 @@ def video_fram_extractor_main():
     parser.add_argument('--config', type=str, default='config/config.yaml')
     args = parser.parse_args()
 
-    with open(args.config) as f:
+    with open(args.config, encoding='UTF-8') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
     again = AgainReader(config=config)
 
-    parse_images_from_video_by_timestamp(video_path=os.path.join(again.data_path, config['data']['vision']['video']),
+    parse_AGAIN_images(video_path=os.path.join(again.data_path, config['data']['vision']['video']),
                                          out_dir=os.path.join(again.data_path, config['data']['vision']['frame']),
                                          again=again.again,
                                          config=config,
-                                         transform=True,
                                          )
 
 
@@ -98,7 +97,7 @@ def tsne_demo():
                                                                     config['test']['seed'])
                                                                 )
 
-    train_dataset = PairDataset(train_samples, numeric_columns, bio_features_size, config)
+    # train_dataset = PairDataset(train_samples, numeric_columns, bio_features_size, config)
     test_dataset = TestDataset(test_samples, numeric_columns, config)
     # test_dataset = TestDataset(train_samples, numeric_columns, config)
 
@@ -114,7 +113,7 @@ def tsne_demo():
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 
-    tester = RanknetTester(train_dataset, test_dataset, config=config, logger=logger)
+    tester = RanknetTester(test_dataset, bio_features_size, config=config, logger=logger)
     tester.test()
     logger.info("Testing is done!")
 
@@ -122,5 +121,7 @@ def tsne_demo():
 
 if __name__ == '__main__':
     # post_analysis_demo('Comparison')
-    tsne_demo()
+    # tsne_demo()
     # dtw_cluster_demo()
+    # video_fram_extractor_main()
+    h5reader('data/frame_data/p1_topdown_s1.h5', 'frames')
