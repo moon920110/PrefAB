@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 
@@ -17,11 +18,25 @@ def get_diversity(df, columns):
         _df.loc[_df[col] <= 0, col] = 0
     return _df.sum(axis=1)
 
-def cleaning_logs(raw_path, dataset_name='Shooter', game='TopDown'):
+
+def cleaning_logs(config, logger):
+	logger.info(f'Cleaning logs for {config["experiment"]["player"]}_{config["experiment"]["game"]}_{config["experiment"]["session"]}')
+
+	player = config['experiment']['player']
+	session = config['experiment']['session']
+	game = config['experiment']['game']
+	game_name = config['game_name'][game]
+	dataset_name = config['experiment']['dataset_name']
+
+	raw_path = os.path.join(config['data']['path'], 'raw_data', f'{player}_{game_name}_{session}.csv')
+	clean_path = os.path.join(config['data']['path'], 'clean_data', f'{player}_{game_name}_{session}_clean.csv')
+
 	cleaned_df = pd.DataFrame()
 	session_df = pd.read_csv(raw_path)
 
 	cleaned_df['time_stamp'] = session_df['timeStamp'] - session_df['timeStamp'].iloc[0]
+	cleaned_df['player_id'] = player
+	cleaned_df['session_id'] = session
 	cleaned_df['genre'] = dataset_name
 	cleaned_df['game'] = game
 	start_time = pd.Timedelta(0)
@@ -61,7 +76,7 @@ def cleaning_logs(raw_path, dataset_name='Shooter', game='TopDown'):
 	cleaned_df['bot_projectile_player_distance'] = get_intensity(session_df, ['botProjectilePlayerDistance'])
 	cleaned_df['bot_aim_at_player'] = get_intensity(session_df, ['botAimAtPlayer'])
 	cleaned_df['pick_ups_visible'] = get_intensity(session_df, ['pickUpsVisible'])
-	cleaned_df['pick_up_player_distance'] = get_intensity(session_df, ['pickUpPlayerDistance'])
+	cleaned_df['pick_up_player_disctance'] = get_intensity(session_df, ['pickUpPlayerDistance'])
 	cleaned_df['destructible_count'] = get_intensity(session_df, ['destructibleCount'])
 	cleaned_df['objects_destroyed'] = get_intensity(session_df, ['objectsDestroyed'])
 	cleaned_df['player_death'] = get_intensity(session_df, ['playerDeath'])
@@ -203,9 +218,42 @@ def cleaning_logs(raw_path, dataset_name='Shooter', game='TopDown'):
 	cleaned_df['event_intensity'] = session_df['[general]eventIntensity']
 	cleaned_df['event_diversity'] = get_intensity(session_df, ['[general]eventDiversity'])
 
+	columns = [
+		"genre", "player_id", "session_id", "game", "time_index", "epoch", "time_stamp", "engine_tick", "arousal",
+		"time_passed", "input_intensity", "input_diversity", "activity", "score", "bot_count", "bot_diversity",
+		"bot_movement", "player_movement", "object_intensity", "object_diversity", "event_intensity", "event_diversity",
+		"key_presses", "player_aim_target", "bot_damaged_by", "key_press_count", "idle_time", "player_score",
+		"player_kill_count", "player_speed_x", "player_speed_y", "player_speed_z", "player_delta_distance",
+		"player_delta_rotation", "player_health", "player_healing", "player_damaged", "player_shooting",
+		"player_reloading", "player_projectile_count", "player_projectile_distance", "reticle_delta_distance",
+		"player_crouching", "player_sprinting", "player_aim_at_enemy", "player_aim_at_destructible",
+		"player_health_pickup", "visible_bot_count", "bot_speed_x", "bot_speed_y", "bot_speed_z", "bot_delta_distance",
+		"bot_delta_rotation", "bot_health", "bot_damaged", "bot_shooting", "bot_reloading", "bot_projectile_count",
+		"bot_projectile_player_distance", "bot_aim_at_player", "pick_ups_visible", "pick_up_player_disctance",
+		"destructible_count", "objects_destroyed", "player_death", "player_tries_shoot_on_reload", "player_standing",
+		"player_speed", "player_speed_boost", "player_is_grounded", "player_is_mid_air", "player_is_looping",
+		"player_is_crashing", "player_is_off_road", "player_gas_pedal", "player_steering", "player_lap",
+		"player_distance_to_way_point", "player_respawn", "bot_standing", "bot_score", "bot_speed", "bot_speed_boost",
+		"bot_is_grounded", "bot_is_looping", "bot_is_off_road", "bot_is_crashing", "bot_gas_pedal",
+		"bot_steering", "bot_lap", "bot_distance_to_way_point", "bot_player_distance",
+		"bot_respawn", "visible_jump_count", "visible_speed_boost_count", "visible_obstacle_count", "visible_loop_count",
+		"player_damaged_by", "bot_types", "pick_up_types", "player_has_collisions", "player_is_colliding_above",
+		"player_is_colliding_below", "player_is_colliding_left", "player_is_colliding_right",
+		"player_is_falling", "player_is_jumping", "player_point_pickup", "player_power_pickup", "player_boost_pickup",
+		"player_slow_pickup", "player_has_powerup", "bot_has_collisions", "bot_is_colliding_above",
+		"bot_is_colliding_below", "bot_is_colliding_left", "bot_is_colliding_right", "bot_is_falling",
+		"bot_is_jumping", "bot_charging",
+		]
+	cleaned_df = cleaned_df.reindex(columns, axis=1)
+	cleaned_df = cleaned_df.dropna(axis=1, how='any')
+
+	cleaned_df.to_csv(clean_path, index=False)
 	return cleaned_df
 
 
+def integrate_arousal():
+	pass
+
+
 if '__main__' == __name__:
-	result = cleaning_logs('../data/log.csv')
-	result.to_csv('../data/cleaned_log.csv', index=False)
+	cleaning_logs('../data/p1_topdown_s1.csv', 'p1', 's1')
