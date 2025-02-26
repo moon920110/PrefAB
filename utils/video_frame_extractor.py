@@ -39,7 +39,12 @@ def parse_custom_images(video_path, out_dir, again, config):
     pass
 
 
-def parse_AGAIN_images(video_path, out_dir, again, config):
+def parse_AGAIN_images(again, config, logger):
+    video_path = os.path.join(config['data']['path'], config['data']['vision']['video'])
+    out_dir = os.path.join(config['data']['path'], config['data']['vision']['frame'])
+
+    logger.info(f'Extract images from video: {video_path} -> {out_dir}')
+
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
@@ -79,8 +84,4 @@ if __name__ == '__main__':
     again = AgainReader(config=config)
     again_shooter = again.game_info_by_genre('Shooter')
 
-    parse_AGAIN_images(video_path=os.path.join(again.data_path, config['data']['vision']['video']),
-                       out_dir=os.path.join(again.data_path, config['data']['vision']['frame']),
-                       again=again_shooter,
-                       config=config,
-                       )
+    parse_AGAIN_images(again=again, config=config)
