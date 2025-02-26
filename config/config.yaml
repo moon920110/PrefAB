@@ -2,12 +2,9 @@ description: |
   Separate the train set and test set explicitly
 
 data:
-  path: /home/jovyan/data/AGAIN
-  again_file: clean_data.csv  # 피험자 데이터로 바꾸면 됨 p{n}_topdown_s{m}.csv
-  bio_file: biographical_data_with_genre.csv # 피험자 데이터로 바꾸면 됨 p{n}_topdown_s{m}_bio.csv
-#  path: data
+  path: data
   vision:
-    video: videos_mp4
+    video: video
     frame: frame_data
   img_mean: [ 0.485, 0.456, 0.406 ]
   img_std: [ 0.229, 0.224, 0.225 ]
@@ -23,6 +20,13 @@ game_name:
   Run'N'Gun: gun
   Pirates!: platform
   Endless: endless
+
+experiment:
+  activate: true
+  player: p1
+  session: s1
+  game: TopDown
+  dataset_name: Shooter
 
 train:
   exp: prefab_v2_solid
@@ -74,7 +78,7 @@ test:
   cutpoints: [-1, 1]
 
 clustering:
-  activate: true
+  activate: false
   metric: 'softdtw'  # 'euclidean', 'dtw', 'softdtw
   input_type: 'arousal'  # 'arousal', 'arousal_window_mean'
   n_clusters: 4

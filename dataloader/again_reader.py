@@ -6,14 +6,48 @@ from tqdm import tqdm
 from utils.stats import get_dtw_cluster
 
 
+class CustomReader:
+    def __init__(self, data, config=None, logger=None):
+        self.config = config
+        self.logger = logger
+
+        self.data = data
+        self.bio = pd.read_csv(os.path.join(config['data']['path'], 'raw_data', 'biographical_data_with_genre.csv'),
+                               encoding='utf-8',
+                               low_memory=False)
+        self.player = config['experiment']['player']
+        self.session = config['experiment']['session']
+        self.game_name = config['game_name'][config['experiment']['game']]
+
+    def prepare_dataset(self):
+        player_bio = self.bio[self.bio['ParticipantID'] == self.player]
+        player_bio = player_bio.drop(columns=['ParticipantID', 'Metacritic Code', 'Genre'])
+        numeric_columns = self.data.select_dtypes(include=['number']).columns
+
+        self.bio['Genre_idx'] = pd.factorize(self.bio['Genre'])[0]
+        gender_size = self.bio['Gender'].unique().size
+        play_freq_size = self.bio['Play Frequency'].unique().size
+        gamer_size = self.bio['Gamer'].unique().size
+        genre_size = self.bio['Genre_idx'].unique().size
+        bio_size = {'gender': gender_size, 'play_freq': play_freq_size, 'gamer': gamer_size, 'genre': genre_size}
+
+        self.data.sort_values('time_index')
+
+        video_name = f'{self.player}_{self.game_name}_{self.session}.h5'
+        video_full_path = os.path.join(self.config['data']['path'], self.config['data']['vision']['frame'], video_name)
+        x = [[self.data, video_full_path, player_bio]]
+
+        return x, numeric_columns, bio_size
+
+
 class AgainReader:
     def __init__(self, config=None, logger=None):
         self.data_path = config['data']['path']
         self.config = config
         self.logger = logger
 
-        again_file_name = config["data"]["again_file"]
-        bio_file_name = config["data"]["bio_file"]
+        again_file_name = 'clean_data.csv'
+        bio_file_name = 'biographical_data_with_genre.csv'
 
         if self.logger is not None:
             self.logger.info(f'data from {os.path.join(self.data_path, "clean_data", again_file_name)}')
