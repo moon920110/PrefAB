@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import h5py
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 from sklearn.metrics import confusion_matrix, accuracy_score, r2_score
 
@@ -54,3 +55,8 @@ def metric(y_pred, y_true, cutpoints=None, infer_type='ranknet'):
 def normalize(val: np.ndarray) -> np.ndarray:
     return (val - val.min()) / (val.max() - val.min())
 
+
+def h5reader(file_path, key):
+    with h5py.File(file_path, 'r') as f:
+        for k in f[key].keys():
+            print(np.array(f[f'{key}/{k}']))
