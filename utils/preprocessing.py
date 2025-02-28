@@ -1,6 +1,8 @@
 import os
 import pandas as pd
 import numpy as np
+import yaml
+
 
 def get_intensity(df, columns):
     _df = df.copy()[columns]
@@ -33,6 +35,7 @@ def cleaning_logs(config, logger):
 
 	cleaned_df = pd.DataFrame()
 	session_df = pd.read_csv(raw_path)
+	session_df = session_df[session_df['tick'] != 0]
 
 	cleaned_df['time_stamp'] = session_df['timeStamp'] - session_df['timeStamp'].iloc[0]
 	cleaned_df['player_id'] = player
@@ -251,9 +254,41 @@ def cleaning_logs(config, logger):
 	return cleaned_df
 
 
-def integrate_arousal():
-	pass
+def integrate_arousal(config):
+	player = config['experiment']['player']
+	session = config['experiment']['session']
+	game = config['experiment']['game']
+	game_name = config['game_name'][game]
+	clean_path = os.path.join(config['data']['path'], 'clean_data', f'{player}_{game_name}_{session}_clean.csv')
+	annotation_path = os.path.join(config['data']['path'], 'raw_data', f'{player}_{session}_arousal.csv')
+	reaction_time = 1000
+
+	clean_data = pd.read_csv(clean_path, encoding='utf-8')
+	annotation_data = pd.read_csv(annotation_path, encoding='utf-8')
+	annotation_data.sort_values(by='VideoTime')
+
+	# Resample session values
+	annotation_data['time_index'] = pd.to_timedelta(annotation_data['VideoTime'].astype('int32'), 'ms')
+	annotation_data = annotation_data.set_index(annotation_data['time_index'], drop=True)
+
+	# Resampling signal at 250ms for consistency
+	annotation_values = annotation_data['Value'].resample('{}ms'.format(250)).mean()
+	annotation_values = annotation_values.ffill(axis=0)
+
+	# Shifting values forward and removing ones that go into negatives
+	annotation_values.index = annotation_values.index - pd.to_timedelta(reaction_time, unit='ms')
+	annotation_values = annotation_values[annotation_values.index >= pd.Timedelta(0)]
+
+	clean_data['arousal'] = clean_data['time_index'].map(annotation_values)
+	clean_data['arousal'] = get_intensity(clean_data, ['arousal'])
+	# locate arousal next to engine_tick (9-th column)
+	clean_data.insert(8, 'arousal', clean_data.pop('arousal'))
+
+	clean_data.to_csv(clean_path, index=False)
 
 
 if '__main__' == __name__:
-	cleaning_logs('../data/p1_topdown_s1.csv', 'p1', 's1')
+	with open('../config/config.yaml', encoding='UTF-8') as f:
+		config = yaml.load(f, Loader=yaml.FullLoader)
+	# cleaning_logs(config)
+	integrate_arousal(config)
