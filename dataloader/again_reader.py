@@ -20,9 +20,6 @@ class CustomReader:
         self.game_name = config['game_name'][config['experiment']['game']]
 
     def prepare_dataset(self):
-        player_bio = self.bio[self.bio['ParticipantID'] == self.player]
-        player_bio = player_bio.drop(columns=['ParticipantID', 'Metacritic Code', 'Genre'])
-        numeric_columns = self.data.select_dtypes(include=['number']).columns
 
         self.bio['Genre_idx'] = pd.factorize(self.bio['Genre'])[0]
         gender_size = self.bio['Gender'].unique().size
@@ -32,11 +29,21 @@ class CustomReader:
         bio_size = {'gender': gender_size, 'play_freq': play_freq_size, 'gamer': gamer_size, 'genre': genre_size}
 
         self.data.sort_values('time_index')
+        self.data['arousal'] = 0
+        self.data['cluster'] = 0
+        self.data['player_idx'] = 0
+        self.data['pair_rank_label'] = 0
+        self.data['game_idx'] = 0
+        self.data['arousal_window_mean'] = 0
+
+        player_bio = self.bio[self.bio['ParticipantID'] == self.player]
+        player_bio = player_bio.drop(columns=['ParticipantID', 'Metacritic Code', 'Genre'])
 
         video_name = f'{self.player}_{self.game_name}_{self.session}.h5'
         video_full_path = os.path.join(self.config['data']['path'], self.config['data']['vision']['frame'], video_name)
         x = [[self.data, video_full_path, player_bio]]
 
+        numeric_columns = self.data.select_dtypes(include=['number']).columns
         return x, numeric_columns, bio_size
 
 

@@ -5,7 +5,7 @@ import argparse
 import numpy as np
 import yaml
 
-from dataloader.again_reader import AgainReader, CustomReader
+from dataloader.again_reader import CustomReader
 from dataloader.dataset import TestDataset
 from utils.preprocessing import cleaning_logs
 from utils.video_frame_extractor import parse_AGAIN_images, cut_video
@@ -23,7 +23,9 @@ def inference(config, logger):
         config['data']['vision']['video'],
         f'{player}_{game_name}_{session}.mp4'
     )
-    clip_path = os.path.join(config['data']['path'], 'video_clips')
+    clip_path = os.path.join(config['data']['path'], 'video_clips', f'{player}_{session}')
+    if not os.path.exists(clip_path):
+        os.makedirs(clip_path)
 
     # v cleaning
     cleaned_log = cleaning_logs(config, logger)
@@ -63,12 +65,6 @@ def inference(config, logger):
         print(f'Video clip {i} is saved at {video_clip}')
 
 
-def interpolate(config):
-    # interpolation
-    # reconstruction graph
-    pass
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PrefAB prototype')
     parser.add_argument('--config', type=str, default='config/config.yaml')
@@ -85,7 +81,7 @@ if __name__ == '__main__':
     sh.setFormatter(formatter)
     logger.addHandler(sh)
 
-    fh = logging.FileHandler(os.path.join(conf['train']['log_dir'], 'exp_log.log'))
+    fh = logging.FileHandler(os.path.join(conf['train']['log_dir'], 'exp_inference.log'))
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 
