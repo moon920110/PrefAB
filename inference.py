@@ -10,6 +10,7 @@ from dataloader.dataset import TestDataset
 from utils.preprocessing import cleaning_logs
 from utils.video_frame_extractor import parse_AGAIN_images, cut_video
 from utils.stats import find_significant_peaks_and_valleys
+from utils.utils import convert_frame_to_time
 from executor.tester import RanknetTester
 
 
@@ -41,14 +42,18 @@ def inference(config, logger):
     peaks, valleys = find_significant_peaks_and_valleys(output, threshold=0.5)
 
     inflections = np.concatenate([peaks, valleys])
-    inflections = np.sort(inflections)
     inflections = np.unique(inflections)
-    roi_list = [[0, 12]]
+    inflections = np.sort(inflections)
+    inflections += 12  # prediction starts from 3 second. 12 frames = 3 seconds
+    print(inflections)
+
+    roi_list = [[1, 4]]  # seconds
     for i in range(len(inflections)):
-        if roi_list[-1][1] >= inflections[i] - 6:
-            roi_list[-1][1] = inflections[i] + 6
+        inflection_time = convert_frame_to_time(inflections[i])
+        if roi_list[-1][1] >= inflection_time - 1.5:
+            roi_list[-1][1] = inflection_time + 1.5
         else:
-            roi_list.append([inflections[i]-6, inflections[i]+6])
+            roi_list.append([inflection_time - 1.5, inflection_time + 1.5])
     print(roi_list)
 
     # cut video
@@ -84,8 +89,4 @@ if __name__ == '__main__':
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 
-    # again = AgainReader(config=conf).game_info_by_name('TopDown')
-    # print(again.columns)
-
     inference(conf, logger)
-    # interpolate(config)

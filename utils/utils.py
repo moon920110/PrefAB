@@ -60,3 +60,7 @@ def h5reader(file_path, key):
     with h5py.File(file_path, 'r') as f:
         for k in f[key].keys():
             print(np.array(f[f'{key}/{k}']))
+
+
+def convert_frame_to_time(frame, fps=4):
+    return frame / fps
