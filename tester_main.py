@@ -11,6 +11,7 @@ from utils.utils import create_new_filename, h5reader
 from dataloader.dataset import PairDataset, TestDataset
 from dataloader.again_reader import AgainReader
 from executor.tester import RanknetTester
+from utils.preprocessing import integrate_arousal
 
 
 def dtw_cluster_demo():
@@ -118,10 +119,17 @@ def tsne_demo():
     logger.info("Testing is done!")
 
 
+def integrate_arousal_test():
+    with open('config/config.yaml', encoding='utf-8') as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+
+    integrate_arousal(config)
+
 
 if __name__ == '__main__':
     # post_analysis_demo('Comparison')
     # tsne_demo()
     # dtw_cluster_demo()
     # video_fram_extractor_main()
-    h5reader('data/frame_data/p1_topdown_s1.h5', 'frames')
+    # h5reader('data/frame_data/p1_topdown_s1.h5', 'frames')
+    integrate_arousal_test()
