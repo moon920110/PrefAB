@@ -24,7 +24,7 @@ game_name:
 experiment:
   activate: true
   player: p1
-  session: s1
+  session: p1s1
   game: TopDown
   dataset_name: Shooter
   model: model/prefab_v2_topdown.pth

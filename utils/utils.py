@@ -64,3 +64,7 @@ def h5reader(file_path, key):
 
 def convert_frame_to_time(frame, fps=4):
     return frame / fps
+
+
+def convert_time_to_frame(time, fps=4):
+    return time * fps

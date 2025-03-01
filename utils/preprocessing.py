@@ -254,6 +254,17 @@ def cleaning_logs(config, logger):
 	return cleaned_df
 
 
+def resample_arousal(annotation_data):
+	annotation_data.sort_values(by='VideoTime')
+	annotation_data['time_index'] = pd.to_timedelta(annotation_data['VideoTime'].astype('int32'), 'ms')
+	annotation_data = annotation_data.set_index(annotation_data['time_index'], drop=True)
+
+	annotation_values = annotation_data['Value'].resample('{}ms'.format(250)).mean()
+	annotation_values = annotation_values.ffill(axis=0)
+
+	return annotation_values
+
+
 def integrate_arousal(config):
 	player = config['experiment']['player']
 	session = config['experiment']['session']
@@ -265,15 +276,8 @@ def integrate_arousal(config):
 
 	clean_data = pd.read_csv(clean_path, encoding='utf-8')
 	annotation_data = pd.read_csv(annotation_path, encoding='utf-8')
-	annotation_data.sort_values(by='VideoTime')
 
-	# Resample session values
-	annotation_data['time_index'] = pd.to_timedelta(annotation_data['VideoTime'].astype('int32'), 'ms')
-	annotation_data = annotation_data.set_index(annotation_data['time_index'], drop=True)
-
-	# Resampling signal at 250ms for consistency
-	annotation_values = annotation_data['Value'].resample('{}ms'.format(250)).mean()
-	annotation_values = annotation_values.ffill(axis=0)
+	annotation_values = resample_arousal(annotation_data)
 
 	# Shifting values forward and removing ones that go into negatives
 	annotation_values.index = annotation_values.index - pd.to_timedelta(reaction_time, unit='ms')

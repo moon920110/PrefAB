@@ -2,6 +2,7 @@ import os
 import logging
 import argparse
 
+import pandas as pd
 import numpy as np
 import yaml
 
@@ -49,18 +50,20 @@ def inference(config, logger):
     inflections += 12  # prediction starts from 3 second. 12 frames = 3 seconds
     print(inflections)
 
-    roi_list = [[1, 4]]  # seconds
+    roi_list = [[1, 6]]  # seconds
     for i in range(len(inflections)):
         inflection_time = convert_frame_to_time(inflections[i])
-        if roi_list[-1][1] >= inflection_time - 1.5:
-            roi_list[-1][1] = inflection_time + 1.5
+        if roi_list[-1][1] >= inflection_time - 2.5:
+            roi_list[-1][1] = inflection_time + 2.5
         else:
-            roi_list.append([inflection_time - 1.5, inflection_time + 1.5])
+            roi_list.append([inflection_time - 2.5, inflection_time + 2.5])
     print(roi_list)
 
     # cut video
+    roi_df = pd.DataFrame(roi_list, columns=['start', 'end'])
+    roi_df.to_csv(os.path.join(clip_path, 'roi.csv'), index=False)
     for i, roi in enumerate(roi_list):
-        video_clip = os.path.join(clip_path, f'{player}_{game_name}_{session}_{i}.mp4')
+        video_clip = os.path.join(clip_path, f'{player}_{game_name}_{session}_{i+1}.mp4')
         cut_video(video_path, roi[0], roi[1], video_clip)
         print(f'Video clip {i} is saved at {video_clip}')
 
