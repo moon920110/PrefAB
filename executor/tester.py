@@ -27,7 +27,7 @@ class RanknetTester:
 
     def inference(self):
         model = Prefab(self.config, self.meta_feature_size, self.bio_features_size)
-        model_path = os.path.join(self.config['data']['path'], self.config['experiment']['model'])
+        model_path = os.path.join(self.config['train']['save_dir'], self.config['experiment']['model'])
         model.load_state_dict(torch.load(model_path))
         model.to(self.device)
         model.eval()

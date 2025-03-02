@@ -36,9 +36,12 @@ class RanknetTrainer:
             dataset,
             [train_size, val_size]
         )
+        if val_size == 0:
+            self.val_dataset = self.train_dataset
+
         self.meta_feature_size = dataset.get_meta_feature_size()
         self.bio_features_size = dataset.bio_features_size
-        self.tester = RanknetTester(dataset, testset, config, logger)
+        self.tester = RanknetTester(testset, self.bio_features_size, config, logger)
         self.save_path = os.path.join(self.config['train']['save_dir'],
                                       f'ranknet_{self.config["train"]["exp"]}_best.pth')
 
@@ -103,8 +106,14 @@ class RanknetTrainer:
         len_val_loader = len(val_loader) // eval_div if len(val_loader) > eval_div else 1
 
         self.logger.info(f'build model gpu: {rank}')
+
         model = Prefab(self.config, self.meta_feature_size, self.bio_features_size)
+        if self.config['train']['fine_tune']:
+            model_path = os.path.join(self.config['train']['save_dir'], self.config['experiment']['model'])
+            model.load_state_dict(torch.load(model_path))
+            self.logger.info(f'Model loaded from {model_path} for fine-tuning')
         model.to(self.device)
+
         ae_criterion = nn.L1Loss().to(self.device)
         rank_criterion = OrdinalCrossEntropyLoss(self.config['train']['cutpoints']).to(self.device)  # FocalLoss(alpha=self.config['train']['focal_alpha'], gamma=self.config['train']['focal_gamma']).to(self.device)
         aux_criterion = nn.CrossEntropyLoss().to(self.device)
