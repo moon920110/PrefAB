@@ -38,6 +38,14 @@ class RanknetTrainer:
         )
         if val_size == 0:
             self.val_dataset = self.train_dataset
+            # val_size = int(train_size * 0.1)
+            # train_size = train_size - val_size
+            # _, self.val_dataset = random_split(
+            #     dataset,
+            #     [train_size, val_size]
+            # )
+
+
 
         self.meta_feature_size = dataset.get_meta_feature_size()
         self.bio_features_size = dataset.bio_features_size
@@ -110,7 +118,7 @@ class RanknetTrainer:
         model = Prefab(self.config, self.meta_feature_size, self.bio_features_size)
         if self.config['train']['fine_tune']:
             model_path = os.path.join(self.config['train']['save_dir'], self.config['experiment']['model'])
-            model.load_state_dict(torch.load(model_path))
+            model.load_state_dict(torch.load(model_path, map_location=self.device))
             self.logger.info(f'Model loaded from {model_path} for fine-tuning')
         model.to(self.device)
 
