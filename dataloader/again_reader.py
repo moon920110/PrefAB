@@ -130,26 +130,27 @@ class AgainReader:
         bio_size = {'gender': gender_size, 'play_freq': play_freq_size, 'gamer': gamer_size, 'genre': genre_size}
 
         # a game log for each player: one session
-        for game in data['game'].unique():
-            for player in data['player_id'].unique():
-                pbar.update(1)
-                player_data = data[(data['game'] == game) & (data['player_id'] == player)]
-                if len(player_data) == 0:
-                    continue
-                video_name = f'{player}_{self.config["game_name"][game]}_{player_data["session_id"].unique()[0]}.h5'
-                video_full_path = os.path.join(self.data_path, self.config['data']['vision']['frame'], video_name)
+        for session in data['session_id'].unique():
+            pbar.update(1)
+            player_data = data[(data['session_id'] == session)]
+            player = player_data['player_id'].unique()[0]
+            game = player_data['game'].unique()[0]
+            if len(player_data) == 0:
+                continue
+            video_name = f'{player}_{self.config["game_name"][game]}_{player_data["session_id"].unique()[0]}.h5'
+            video_full_path = os.path.join(self.data_path, self.config['data']['vision']['frame'], video_name)
 
-                player_data = player_data.sort_values('time_index')
+            player_data = player_data.sort_values('time_index')
 
-                player_bio = self.bio[self.bio['ParticipantID'] == player]
-                player_bio = player_bio.drop(columns=['ParticipantID', 'Metacritic Code', 'Genre'])
-                if player_bio.empty:
-                    continue
+            player_bio = self.bio[self.bio['ParticipantID'] == player]
+            player_bio = player_bio.drop(columns=['ParticipantID', 'Metacritic Code', 'Genre'])
+            if player_bio.empty:
+                continue
 
-                # pads = pd.concat([player_data.iloc[0]] * 3, axis=1).T
-                # player_data = pd.concat([pads, player_data], ignore_index=True)
+            # pads = pd.concat([player_data.iloc[0]] * 3, axis=1).T
+            # player_data = pd.concat([pads, player_data], ignore_index=True)
 
-                x.append([player_data, video_full_path, player_bio])
+            x.append([player_data, video_full_path, player_bio])
 
         return x, numeric_columns, bio_size
 
