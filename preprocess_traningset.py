@@ -29,6 +29,14 @@ def migrate_clean_data():
             main_clean = pd.concat([main_clean, df], ignore_index=True)
     main_clean.to_csv(os.path.join(root, 'clean_data_custom.csv'), index=False)
 
+    sessions = main_clean['session_id'].unique()
+    sessions = [session for session in sessions if 's4' in session]
+
+    data_s4 = main_clean[main_clean['session_id'].isin(sessions)]
+    data_not_s4 = main_clean[~main_clean['session_id'].isin(sessions)]
+    data_s4.to_csv(os.path.join(root, 'clean_data_custom_test.csv'), index=False)
+    data_not_s4.to_csv(os.path.join(root, 'clean_data_custom_train.csv'), index=False)
+
 
 if __name__ == '__main__':
     import yaml

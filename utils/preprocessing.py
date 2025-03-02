@@ -38,6 +38,7 @@ def cleaning_logs(config, logger):
 	session_df = session_df[session_df['tick'] != 0]
 
 	cleaned_df['time_stamp'] = session_df['timeStamp'] - session_df['timeStamp'].iloc[0]
+	cleaned_df['time_stamp'] = cleaned_df['time_stamp'].apply(lambda x: round(x, 4))
 	cleaned_df['player_id'] = player
 	cleaned_df['session_id'] = session
 	cleaned_df['genre'] = dataset_name
