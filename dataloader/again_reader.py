@@ -48,12 +48,13 @@ class CustomReader:
 
 
 class AgainReader:
-    def __init__(self, config=None, logger=None):
+    def __init__(self, config=None, logger=None, again_file_name=None):
         self.data_path = config['data']['path']
         self.config = config
         self.logger = logger
 
-        again_file_name = 'clean_data.csv'
+        if again_file_name is None:
+            again_file_name = 'clean_data.csv'
         bio_file_name = 'biographical_data_with_genre.csv'
 
         if self.logger is not None:

@@ -4,6 +4,7 @@ import logging
 
 import yaml
 import torch
+import pandas as pd
 
 from utils.stats import find_significant_peaks_and_valleys, inflection_comparison, get_dtw_cluster, reconstruct_state_via_interpolation
 from utils.video_frame_extractor import parse_AGAIN_images
@@ -14,15 +15,22 @@ from executor.tester import RanknetTester
 from utils.preprocessing import integrate_arousal
 
 
-def dtw_cluster_demo():
+def dtw_cluster_demo(save=False):
     with open('./config/config.yaml') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
     game = 'TopDown'
     again_reader = AgainReader(config)
-    data = again_reader.game_info_by_name(game)
-    print(f'len data: {len(data)}')
+    custom_again_reader = AgainReader(config, again_file_name='clean_data_custom.csv')
 
-    return get_dtw_cluster(data, config)
+    data = again_reader.game_info_by_name(game)
+    custom_data = custom_again_reader.game_info_by_name(game)
+    data = pd.concat([data, custom_data], ignore_index=True)
+
+    clusters = get_dtw_cluster(data, config)
+    if save:
+        clusters = pd.DataFrame(clusters.items(), columns=['session_id', 'cluster'])
+        clusters.to_csv(os.path.join(config['data']['path'], 'cluster', f'cluster_{game}.csv'), index=False)
+    return clusters
 
 
 def find_peak_demo():
@@ -129,7 +137,7 @@ def integrate_arousal_test():
 if __name__ == '__main__':
     # post_analysis_demo('Comparison')
     # tsne_demo()
-    # dtw_cluster_demo()
+    print(dtw_cluster_demo(True))
     # video_fram_extractor_main()
     # h5reader('data/frame_data/p1_topdown_s1.h5', 'frames')
-    integrate_arousal_test()
+    # integrate_arousal_test()
