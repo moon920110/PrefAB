@@ -36,6 +36,7 @@ def interpolate(config, logger):
         session_id = anno_sessions[i]
         annotation_data = annotation_data_all[annotation_data_all['SessionID'] == session_id]
         annotation_data = resample_arousal(annotation_data)
+        annotation_data[-1] = annotation_data[-2]
 
         idx = i + 1
         start_time = roi['start']
@@ -52,13 +53,20 @@ def interpolate(config, logger):
             clean_data.loc[clean_data['time_index'] == time_index, 'arousal'] = arousal + start_arousal_offset
 
         end_timedelta = pd.to_timedelta(end_time, unit='s')
+
+        if end_timedelta >= clean_data['time_index'].iloc[-1]:
+            end_timedelta = clean_data['time_index'].iloc[-1]
+
         end_index = clean_data.loc[clean_data['time_index'] == end_timedelta].index[0]
-        last_4_data = annotation_data.values[-4:]
-        gradient = np.diff(last_4_data).mean()
+        last_4_data = annotation_data.values
+        gradient = np.diff(last_4_data).sum()
+        # gradient = last_4_data.mean()
         if end_index < len(clean_data):
             for i in range(end_index, len(clean_data)):
                 # print(f'prev_arousal: {clean_data.loc[i - 1, "arousal"]}, gradient: {gradient}, sum: {clean_data.loc[i - 1, "arousal"] + gradient}')
-                clean_data.loc[i, 'arousal'] = clean_data.loc[i - 1, 'arousal'] + gradient
+                # clean_data.loc[i, 'arousal'] = clean_data.loc[i - 1, 'arousal'] + gradient
+                clean_data.loc[i, 'arousal'] = start_arousal_offset + gradient
+                # print(start_arousal_offset, clean_data.loc[i, 'arousal'], gradient)
 
     clean_data['arousal'] = get_intensity(clean_data, ['arousal'])
     clean_data.to_csv(clean_path)
