@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 from matplotlib.font_manager import FontProperties
 from tslearn.clustering import TimeSeriesKMeans, silhouette_score
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, peak_widths
 from scipy.interpolate import PchipInterpolator, CubicSpline
 
 from utils.utils import read_scalar_summary
@@ -85,6 +85,46 @@ def get_dtw_cluster(data, config):
     return session_cluster
 
 
+def find_inflection_points(y, t=12, prominence=0, distance=1):
+    # Compute the first derivative (gradient)
+    dy = np.diff(y)
+
+    # Compute smoothed gradient using a moving average of t steps
+    smoothed_dy = np.convolve(dy, np.ones(t) / t, mode='valid')
+    gradient_signs = np.sign(smoothed_dy)  # 1 for increase, -1 for decrease, 0 for flat
+
+    # Find peaks (local maxima) and valleys (local minima) as inflection points
+    peaks, peak_props = find_peaks(y, prominence=prominence, distance=distance)
+    valleys, valley_props = find_peaks(-y, prominence=prominence, distance=distance)
+    inflection_points = np.sort(np.concatenate((peaks, valleys)))
+
+    # Compute peak and valley widths
+    peak_widths_vals = peak_widths(y, peaks, rel_height=0.5)[0]
+    valley_widths_vals = peak_widths(-y, valleys, rel_height=0.5)[0]
+
+    # Determine start and end points of peak/valley areas using their widths
+    peak_start = (peaks - peak_widths_vals.astype(int) // 2).clip(min=0)
+    peak_end = (peaks + peak_widths_vals.astype(int) // 2).clip(max=len(y) - 1)
+    valley_start = (valleys - valley_widths_vals.astype(int) // 2).clip(min=0)
+    valley_end = (valleys + valley_widths_vals.astype(int) // 2).clip(max=len(y) - 1)
+
+    # Create a mask for excluded points
+    excluded_mask = np.zeros(len(y), dtype=bool)
+    for start, end in zip(peak_start, peak_end):
+        excluded_mask[start:end + 1] = True
+    for start, end in zip(valley_start, valley_end):
+        excluded_mask[start:end + 1] = True
+
+    # Find gradient change start points
+    change_points = np.where(np.diff(gradient_signs) != 0)[0] + t  # Adjust index to original scale
+    valid_change_points = [cp for cp in change_points if not excluded_mask[cp]]
+
+    # Concatenate inflection points and valid change points
+    inflection_points = np.sort(np.concatenate((inflection_points, valid_change_points))).astype(int)
+
+    return inflection_points
+
+
 def find_significant_peaks_and_valleys(
         data, threshold=0.1, prominence=None, distance=None, title=None, save_dir=None, show=False):
     smoothed_data = np.convolve(data, np.ones(10) / 10, mode='same')
@@ -117,6 +157,7 @@ def find_significant_peaks_and_valleys(
     return top_peaks, top_valleys
 
 
+# TODO: accuracy가 1이 넘는데, 버그 수정할 것 + regression이 너무 잘나온다...??
 def inflection_comparison(root, show=False, epoch=False):
     if epoch:
         log_dirs = glob.glob(os.path.join(root, 'test_epc[5-9][0-9]*'))  # recent 10 epochs (epoch 60)
@@ -141,8 +182,7 @@ def inflection_comparison(root, show=False, epoch=False):
     font.set_size(14)
 
     print(log_dict)
-    accs = []
-    errors = []
+    f1_scores = []
     for session, tags in log_dict.items():
         arousal_path = tags['arousal']
         predict_path = tags['predict']
@@ -152,51 +192,46 @@ def inflection_comparison(root, show=False, epoch=False):
         _, arousal_summary = read_scalar_summary(arousal_event_files[0])
         _, predict_summary = read_scalar_summary(predict_event_files[0])
 
-        arousal_peaks, arousal_valleys = find_significant_peaks_and_valleys(arousal_summary, threshold=0, prominence=0.01, distance=20)
-        predict_peaks, predict_valleys = find_significant_peaks_and_valleys(predict_summary, threshold=0, prominence=0.01, distance=20)
-        arousal_inflections = np.concatenate([arousal_peaks, arousal_valleys])
+        predict_peaks, predict_valleys = find_significant_peaks_and_valleys(predict_summary, threshold=0, prominence=0.01)
         predict_inflections = np.concatenate([predict_peaks, predict_valleys])
+        arousal_inflections = find_inflection_points(arousal_summary)
 
+        unused_predicts = set(predict_inflections)
         correct_peak_cnt = 0
-        error_peak_cnt = 0
-        for arousal_inflection in arousal_inflections:
-            # find nearest peak in predict within +-10 distance
-            nearest_peak = np.argmin(np.abs(arousal_inflection - predict_inflections))
-            if np.abs(arousal_inflection - predict_inflections[nearest_peak]) < 10:  # half of distance
-                correct_peak_cnt += 1
-        accs.append(correct_peak_cnt / len(predict_inflections))
 
-        for predict_inflection in predict_inflections:
-            # find nearest peak in predict within +-10 distance
-            nearest_peak = np.argmin(np.abs(predict_inflection - arousal_inflections))
-            if np.abs(predict_inflection - arousal_inflections[nearest_peak]) >= 10:
-                error_peak_cnt += 1
-        errors.append(error_peak_cnt / len(predict_inflections))
+        for arousal_inflection in arousal_inflections:
+            # Find candidate predictions within the window
+            candidates = [p for p in unused_predicts if abs(p - arousal_inflection) < 12]
+            if candidates:
+                # Pick the closest one
+                best_match = min(candidates, key=lambda p: abs(p - arousal_inflection))
+                correct_peak_cnt += 1
+                unused_predicts.remove(best_match)
+
+        precision = correct_peak_cnt / len(predict_inflections) if len(predict_inflections) > 0 else 0
+        recall = correct_peak_cnt / len(arousal_inflections) if len(arousal_inflections) > 0 else 0
+        f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+        f1_scores.append(f1_score)
 
         plt.plot(arousal_summary, label='arousal (ground truth)')
         plt.plot(predict_summary, color='gray', linestyle='--', alpha=0.5, label='predicted arousal')
         plt.plot(arousal_inflections, arousal_summary[arousal_inflections], "r*", label='true peaks')
-        # plt.plot(arousal_valleys, arousal_summary[arousal_valleys], "r*")
         plt.plot(predict_inflections, predict_summary[predict_inflections], "g*", alpha=0.5, label='predicted peaks')
-        # plt.plot(predict_valleys, predict_summary[predict_valleys], "g*", alpha=0.5)
 
         for inflection in predict_inflections:
             plt.vlines(inflection, arousal_summary[inflection], predict_summary[inflection], colors='green', linestyles=':', alpha=0.5)
-            # plt.vlines(valley, arousal_summary[valley], predict_summary[valley], colors='green', linestyles=':', alpha=0.5)
 
-        plt.title(session)
+        plt.title(f"{root.split('/')[-1]}_{session}")
         plt.legend()
 
-        save_dir = os.path.join(root.split('/')[0], 'peak', root.split('/')[-1])
+        save_dir = os.path.join(*root.split('/')[:-1], 'peak', root.split('/')[-1])
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
-            # print(f'make dir: {save_dir}')
 
         plt.savefig(os.path.join(save_dir, f'{session}.png'))
         if show:
             plt.show()
-        # print(f'save to {os.path.join(save_dir, f"{session}.png")}')
-    print(f'exp: {root}, accuracy: {np.mean(accs)}({np.std(accs)}), error: {np.mean(errors)}({np.std(errors)})')
+    print(f'exp: {root}, f1 score: {np.mean(f1_scores)}({np.std(f1_scores)})')
 
 
 # TODO: uniform sample/random sample로 interpolation한 것과 결과 비교해볼것, 평균적으로 inflection이 얼마나 발생하는 지 계산해볼것
