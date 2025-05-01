@@ -25,6 +25,10 @@ def read_scalar_summary(log_dir):
     steps = [event.step for event in scalar_event]
     values = [event.value for event in scalar_event]
 
+    unique_steps, indices = np.unique(steps, return_index=True)
+    steps = unique_steps
+    values = np.array(values)[indices]
+
     return np.array(steps), np.array(values)
 
 
