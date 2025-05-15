@@ -34,8 +34,7 @@ class Trainer:
         )
         self.meta_feature_size = dataset.get_meta_feature_size()
         self.bio_features_size = dataset.bio_features_size
-        self.test_dataset = testset
-        self.tester = RanknetTester(dataset, self.bio_features_size, config, logger)
+        self.tester = RanknetTester(testset, self.bio_features_size, config, logger)
         self.save_path = os.path.join(self.config['train']['save_dir'],
                                       f'ranknet_{self.config["train"]["exp"]}_best.pth')
 
