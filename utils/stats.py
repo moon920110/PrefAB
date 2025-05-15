@@ -311,3 +311,21 @@ def reconstruct_state_via_interpolation(root, show=False, epoch=False):
         plt.savefig(os.path.join(save_dir, f'{session}.png'))
         if show:
             plt.show()
+
+# make time comparison function
+def compute_time_efficiency(root, player, session):
+    log_file = os.path.join(root, player, f'{player}_topdown_{session}.csv')
+    roi_file = os.path.join(root, player, f'{player}_{session}', 'roi.csv')
+
+    log = pd.read_csv(log_file)
+    roi = pd.read_csv(roi_file)
+
+    total_duration = log['timeStamp']
+    clip_total_duation = 0
+    for _, row in roi.iterrows():
+        start = row['start']
+        end = row['end']
+        clip_total_duation += end - start
+
+    time_efficiency = clip_total_duation / total_duration
+    return time_efficiency, total_duration, clip_total_duation
