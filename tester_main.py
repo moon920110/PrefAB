@@ -1,4 +1,5 @@
 import os
+import shutil
 import argparse
 import logging
 
@@ -6,7 +7,7 @@ import yaml
 import torch
 import pandas as pd
 
-from utils.stats import find_significant_peaks_and_valleys, inflection_comparison, get_dtw_cluster, reconstruct_state_via_interpolation
+from utils.stats import find_significant_peaks_and_valleys, inflection_comparison, get_dtw_cluster, reconstruct_state_via_interpolation, compute_time_efficiency
 from utils.video_frame_extractor import parse_AGAIN_images
 from utils.utils import create_new_filename, h5reader
 from dataloader.dataset import PairDataset, TestDataset
@@ -54,18 +55,48 @@ def find_peak_demo():
             break
 
 
-def post_analysis_demo(case='None'):
-    dirs = [['/home/jovyan/projects/PrefAB/log/prefab_bio_film_cluster_aux_TinyCars', False]]
+def post_analysis_demo(case='None', vis=True):
+
+    dirs = os.listdir('/home/jovyan/projects/PrefAB/log/test/comparison')
+    dirs = [
+        '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobio_test',
+        '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobio_train',
+        '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_noaux_1_test',
+        '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_noaux_1_train',
+        '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobioaux_test',
+        '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobioaux_train',
+    ]
+    # dirs = [
+    #     '/home/jovyan/projects/PrefAB/log/regression_tinycars',
+    #     '/home/jovyan/projects/PrefAB/log/regression_solid',
+    #     '/home/jovyan/projects/PrefAB/log/regression_apex',
+    #     '/home/jovyan/projects/PrefAB/log/regression_heist',
+    #     '/home/jovyan/projects/PrefAB/log/regression_shootout',
+    #     '/home/jovyan/projects/PrefAB/log/regression_topdown',
+    #     '/home/jovyan/projects/PrefAB/log/regression_runngun',
+    #     '/home/jovyan/projects/PrefAB/log/regression_pirates',
+    #     '/home/jovyan/projects/PrefAB/log/regression_endless',
+    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_tinycars',
+    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_solid',
+    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_apex_legacy',
+    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_heist',
+    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_shootout',
+    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_topdown',
+    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_runngun',
+    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_pirates',
+    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_endless',
+    #     ]
     for item in dirs:
+        # path = os.path.join('/home/jovyan/projects/PrefAB/log/test/comparison', item)
+        path = item
         # inflection_comparison(dir)
         if case == 'Comparison':
-            inflection_comparison(item[0], True, item[1])
+            inflection_comparison(path, vis, False)
         elif case == 'Reconstruction':
-            reconstruct_state_via_interpolation(item[0], True, item[1])
+            reconstruct_state_via_interpolation(item[0], vis, item[1])
 
 
-
-def video_fram_extractor_main():
+def video_frame_extractor_main():
     parser = argparse.ArgumentParser(description='PrefAB prototype')
     parser.add_argument('--config', type=str, default='config/config.yaml')
     args = parser.parse_args()
