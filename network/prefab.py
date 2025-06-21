@@ -107,6 +107,13 @@ class Prefab(nn.Module):
         self._init_weights()
 
     def _init_weights(self):
+        if self.config['train']['ablation']['film']:
+            for param in self.FiLM.parameters():
+                param.requires_grad = False
+        if self.config['train']['ablation']['aux']:
+            for param in self.aux_fc.parameters():
+                param.requires_grad = False
+
         for m in self.modules():
             if isinstance(m, nn.Linear):
                 # if m is self.fc:
@@ -146,7 +153,11 @@ class Prefab(nn.Module):
         genre_emb = self.genre_embedding(genre)
 
         bio_feature = torch.cat([age_emb, gender_onehot, freq_onehot, platform, gamer_onehot, genre_emb], dim=1)
-        film_gamma, film_beta = self.FiLM(bio_feature)
+        if self.config['train']['ablation']['film']:
+            film_gamma = torch.ones(bio_feature.shape[0], 1).to(bio_feature.device)
+            film_beta = torch.zeros(bio_feature.shape[0], 1).to(bio_feature.device)
+        else:
+            film_gamma, film_beta = self.FiLM(bio_feature)
         # copy bio_ext to match the sequence length
         # bio_ext = bio_ext.unsqueeze(1).repeat(1, self.window_size, 1)
 
@@ -186,7 +197,10 @@ class Prefab(nn.Module):
             d = None
         z = avg_pooled * film_gamma + film_beta
         x = self.main_fc(z)
-        a = self.aux_fc(z)
+        if self.config['train']['ablation']['aux']:
+            a = self.aux_fc(z.detach())
+        else:
+            a = self.aux_fc(z)
 
         if test:
             return x, a, d, z

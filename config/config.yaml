@@ -58,6 +58,10 @@ train:
   data_balancing: true
   cutpoints: [-1, 1]
   seed: 1125
+  fine_tune: false
+  ablation:
+      film: false
+      aux: false
   distributed:
     multi_gpu: true
     num_gpus: 4

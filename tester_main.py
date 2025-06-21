@@ -82,17 +82,12 @@ def video_fram_extractor_main():
                                          )
 
 
-def tsne_demo():
-    parser = argparse.ArgumentParser(description='PrefAB prototype')
-    parser.add_argument('--config', type=str, default='config/config.yaml')
-    args = parser.parse_args()
-
-    with open(args.config) as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+def tsne_demo(config, val_type):
+    # trainset / testset
 
     if not os.path.exists(config['test']['log_dir']):
         os.makedirs(config['test']['log_dir'])
-    config['test']['new_exp'] = create_new_filename(config['test']['log_dir'], config['test']['exp'])
+    config['test']['new_exp'] = create_new_filename(config['test']['log_dir'], f"{config['test']['exp']}_{val_type}")
 
     if not os.path.exists(os.path.join(config['test']['log_dir'], f"{config['test']['new_exp']}")):
         os.makedirs(os.path.join(config['test']['log_dir'], f"{config['test']['new_exp']}"))
@@ -107,8 +102,10 @@ def tsne_demo():
                                                                 )
 
     # train_dataset = PairDataset(train_samples, numeric_columns, bio_features_size, config)
-    test_dataset = TestDataset(test_samples, numeric_columns, config)
-    # test_dataset = TestDataset(train_samples, numeric_columns, config)
+    if val_type == 'train':
+        test_dataset = TestDataset(train_samples, numeric_columns, config)
+    else:
+        test_dataset = TestDataset(test_samples, numeric_columns, config)
 
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
@@ -133,11 +130,86 @@ def integrate_arousal_test():
 
     integrate_arousal(config)
 
+def time_efficiency_demo():
+    root = '/home/jovyan/data/exp2'
+    players = [f'p{i}' for i in range(1, 26)]
+    sessions = [f's{i}' for i in range (1, 4)]
+
+    results = {}
+    for player in players:
+        for session in sessions:
+            dir_name = os.path.join(root, player, f'{player}_{session}')
+            if os.path.exists(dir_name):
+                efficiency, total_duration, clip_duration = compute_time_efficiency(root, player, session)
+                print(f'{player}_{session}: efficiency: {efficiency} ({clip_duration} / {total_duration})')
+                result = {
+                    'efficiency': efficiency,
+                    'clip_duration': clip_duration,
+                    'total_duration': total_duration,
+                }
+                results[f'{player}_{session}'] = result
+    results_df = pd.DataFrame(results)
+    # transpose results_df
+    results_df = results_df.T
+    results_df.to_csv(os.path.join(root, 'time_efficiency.csv'))
+
+    print(results_df)
+    avg_efficiency = results_df['efficiency'].mean()
+    avg_clip_duration = results_df['clip_duration'].mean()
+    avg_total_duration = results_df['total_duration'].mean()
+    print(f'average efficiency: {avg_efficiency} / average clip duration: {avg_clip_duration} / average total duration: {avg_total_duration}')
+
+
+def auto_test(config):
+    games = {
+        'TinyCars': 'tinycars',
+        'Solid': 'solid',
+        # 'ApexSpeed': 'apex',
+        # 'Heist!': 'heist',
+        # 'Shootout': 'shootout',
+        # 'TopDown': 'topdown',
+        # "Run'N'Gun": 'runngun',
+        # "Pirates!": 'pirates',
+        # "Endless": 'endless'
+    }
+
+    for game, acronym in games.items():
+        exps = [[f'regression_{acronym}_20', 'non_ordinal'],
+                # [f'prefab_{acronym}_re', 'prefab'],
+                # [f'prefab_v2_{acronym}', 'prefab']
+                ]
+
+        config['train']['game'] = game
+        for exp, mode in exps:
+            config['test']['exp'] = exp
+            config['train']['mode'] = mode
+            config['test']['mode'] = mode
+            if not os.path.exists(os.path.join(config['test']['log_dir'], f"{exp}_train")):
+                print(f'exp: {exp} for trainset')
+                try:
+                    tsne_demo(config, 'train')
+                except:
+                    os.remove(os.path.join(config['test']['log_dir'], f"{exp}_train"))
+            if not os.path.exists(os.path.join(config['test']['log_dir'], f"{exp}_test")):
+                print(f'exp: {exp} for testset')
+                try:
+                    tsne_demo(config, 'test')
+                except:
+                    shutil.rmtree(os.path.join(config['test']['log_dir'], f"{exp}_test"))
+
 
 if __name__ == '__main__':
-    # post_analysis_demo('Comparison')
-    # tsne_demo()
-    print(dtw_cluster_demo(True))
-    # video_fram_extractor_main()
+    parser = argparse.ArgumentParser(description='PrefAB prototype')
+    parser.add_argument('--config', type=str, default='config/config.yaml')
+    args = parser.parse_args()
+
+    with open(args.config) as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+
+    post_analysis_demo('Comparison', False)
+    # tsne_demo(config, 'test')
+    # tsne_demo(config, 'train')
+    # time_efficiency_demo()
+    # video_frame_extractor_main()
     # h5reader('data/frame_data/p1_topdown_s1.h5', 'frames')
     # integrate_arousal_test()

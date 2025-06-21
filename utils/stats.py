@@ -157,13 +157,12 @@ def find_significant_peaks_and_valleys(
     return top_peaks, top_valleys
 
 
-# TODO: accuracy가 1이 넘는데, 버그 수정할 것 + regression이 너무 잘나온다...??
 def inflection_comparison(root, show=False, epoch=False):
     if epoch:
         log_dirs = glob.glob(os.path.join(root, 'test_epc[5-9][0-9]*'))  # recent 10 epochs (epoch 60)
     else:
         log_dirs = glob.glob(os.path.join(root, 'test_*'))
-    print(f'root: {root} log_dirs: {log_dirs}')
+    # print(f'root: {root} log_dirs: {log_dirs}')
     log_dict = {}
     for log_dir in log_dirs:
         dir_name = log_dir.split('/')[-1]
@@ -181,7 +180,7 @@ def inflection_comparison(root, show=False, epoch=False):
     font.set_weight('bold')
     font.set_size(14)
 
-    print(log_dict)
+    # print(log_dict)
     f1_scores = []
     for session, tags in log_dict.items():
         arousal_path = tags['arousal']
@@ -224,7 +223,7 @@ def inflection_comparison(root, show=False, epoch=False):
         plt.title(f"{root.split('/')[-1]}_{session}")
         plt.legend()
 
-        save_dir = os.path.join(*root.split('/')[:-1], 'peak', root.split('/')[-1])
+        save_dir = os.path.join('/', *root.split('/')[:-1], 'peak', root.split('/')[-1])
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
 

@@ -168,9 +168,9 @@ class RanknetTrainer:
                 o = o2 - o1
 
                 ranknet_loss = rank_criterion(o, label)
-                aux_loss = aux_criterion(a_o1, aux_label) + aux_criterion(a_o2, aux_label)
+                aux_loss = torch.tensor(0).to(self.device) if self.config['train']['ablation']['aux'] else aux_criterion(a_o1, aux_label) + aux_criterion(a_o2, aux_label)
                 if self.mode != 'feature':
-                    ae_loss = ae_criterion(d1, img1.view(-1, *img1.shape[2:])) + ae_criterion(d2, img2.view(-1, *img2.shape[2:]))
+                    # ae_loss = ae_criterion(d1, img1.view(-1, *img1.shape[2:])) + ae_criterion(d2, img2.view(-1, *img2.shape[2:]))
                     ae_loss = 0
                     loss = ranknet_loss + ae_loss * self.config['train']['ae_loss_weight'] + aux_loss * self.config['train']['aux_loss_weight']
                 else:
