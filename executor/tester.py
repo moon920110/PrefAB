@@ -91,7 +91,11 @@ class RanknetTester:
 
         self.logger.info(f'Model loaded from {model_path}')
         with torch.no_grad():
-            indices = self.test_dataset.sample_player_data(self.config['test']['sample_size'])
+            sample_size = self.config['test']['sample_size']
+            if sample_size == -1:
+                indices = range(len(self.test_dataset.player_idx) - 1)
+            else:
+                indices = self.test_dataset.sample_player_data(sample_size)
             metadata = []
             embeddings = []
 
