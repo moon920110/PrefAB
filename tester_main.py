@@ -7,7 +7,7 @@ import yaml
 import torch
 import pandas as pd
 
-from utils.stats import find_significant_peaks_and_valleys, inflection_comparison, get_dtw_cluster, reconstruct_state_via_interpolation, compute_time_efficiency
+from utils.stats import *
 from utils.video_frame_extractor import parse_AGAIN_images
 from utils.utils import create_new_filename, h5reader
 from dataloader.dataset import PairDataset, TestDataset
@@ -58,14 +58,14 @@ def find_peak_demo():
 def post_analysis_demo(case='None', vis=True):
 
     dirs = os.listdir('/home/jovyan/projects/PrefAB/log/test/comparison')
-    dirs = [
-        '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobio_test',
-        '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobio_train',
-        '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_noaux_1_test',
-        '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_noaux_1_train',
-        '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobioaux_test',
-        '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobioaux_train',
-    ]
+    # dirs = [
+    #     '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobio_test',
+    #     '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobio_train',
+    #     '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_noaux_1_test',
+    #     '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_noaux_1_train',
+    #     '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobioaux_test',
+    #     '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobioaux_train',
+    # ]
     # dirs = [
     #     '/home/jovyan/projects/PrefAB/log/regression_tinycars',
     #     '/home/jovyan/projects/PrefAB/log/regression_solid',
@@ -86,14 +86,25 @@ def post_analysis_demo(case='None', vis=True):
     #     '/home/jovyan/projects/PrefAB/log/prefab_v2_pirates',
     #     '/home/jovyan/projects/PrefAB/log/prefab_v2_endless',
     #     ]
-    for item in dirs:
-        # path = os.path.join('/home/jovyan/projects/PrefAB/log/test/comparison', item)
-        path = item
+    df = pd.DataFrame(columns=['model', 'game', 'phase', 'mean', 'std'])
+    for idx, item in enumerate(dirs):
+        if not item.startswith('prefab') and not item.startswith('regression'):
+            continue
+        model = item.split('_')[0]
+        game = item.split('_')[-2]
+        data = item.split('_')[-1]
+        # if model != 'prefab_v2_topdown':
+        path = os.path.join('/home/jovyan/projects/PrefAB/log/test/comparison', item)
+        # path = item
         # inflection_comparison(dir)
         if case == 'Comparison':
-            inflection_comparison(path, vis, False)
+            m, std = inflection_comparison(path, vis, False, True)
+            # insert into df
+            df.loc[idx] = [model, game, data, m, std]
+
         elif case == 'Reconstruction':
             reconstruct_state_via_interpolation(item[0], vis, item[1])
+    df.to_csv(f'/home/jovyan/projects/PrefAB/log/test/comparison/results.csv', index=False)
 
 
 def video_frame_extractor_main():
@@ -195,19 +206,19 @@ def auto_test(config):
     games = {
         'TinyCars': 'tinycars',
         'Solid': 'solid',
-        # 'ApexSpeed': 'apex',
-        # 'Heist!': 'heist',
-        # 'Shootout': 'shootout',
-        # 'TopDown': 'topdown',
-        # "Run'N'Gun": 'runngun',
-        # "Pirates!": 'pirates',
-        # "Endless": 'endless'
+        'ApexSpeed': 'apex',
+        'Heist!': 'heist',
+        'Shootout': 'shootout',
+        'TopDown': 'topdown',
+        "Run'N'Gun": 'runngun',
+        "Pirates!": 'pirates',
+        "Endless": 'endless'
     }
 
     for game, acronym in games.items():
-        exps = [[f'regression_{acronym}_20', 'non_ordinal'],
+        exps = [[f'regression_{acronym}', 'non_ordinal'],
                 # [f'prefab_{acronym}_re', 'prefab'],
-                # [f'prefab_v2_{acronym}', 'prefab']
+                [f'prefab_v2_{acronym}', 'prefab']
                 ]
 
         config['train']['game'] = game
@@ -229,6 +240,16 @@ def auto_test(config):
                     shutil.rmtree(os.path.join(config['test']['log_dir'], f"{exp}_test"))
 
 
+def manual_inflection_comparison_test(config):
+    again = AgainReader(config)
+    games = config['game_name'].keys()
+
+    print('manual inflection comparison test')
+    for game in games:
+        data = again.game_info_by_name(game)
+        inflection_comparison_manual(data, game, True)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PrefAB prototype')
     parser.add_argument('--config', type=str, default='config/config.yaml')
@@ -237,7 +258,9 @@ if __name__ == '__main__':
     with open(args.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
-    post_analysis_demo('Comparison', False)
+    auto_test(config)
+    # manual_inflection_comparison_test(config)
+    # post_analysis_demo('Comparison', False)
     # tsne_demo(config, 'test')
     # tsne_demo(config, 'train')
     # time_efficiency_demo()

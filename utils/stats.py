@@ -157,7 +157,104 @@ def find_significant_peaks_and_valleys(
     return top_peaks, top_valleys
 
 
-def inflection_comparison(root, show=False, epoch=False):
+def compute_inflection_f1(predict_inflections, arousal_inflections):
+    unused_predicts = set(predict_inflections)
+    correct_peak_cnt = 0
+
+    for arousal_inflection in arousal_inflections:
+        # Find candidate predictions within the window
+        candidates = [p for p in unused_predicts if abs(p - arousal_inflection) < 12]
+        if candidates:
+            # Pick the closest one
+            best_match = min(candidates, key=lambda p: abs(p - arousal_inflection))
+            correct_peak_cnt += 1
+            unused_predicts.remove(best_match)
+
+    precision = correct_peak_cnt / len(predict_inflections) if len(predict_inflections) > 0 else 0
+    recall = correct_peak_cnt / len(arousal_inflections) if len(arousal_inflections) > 0 else 0
+    f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+    return f1_score
+
+
+def compute_roi_f1(predict_rois, arousal_rois, total_length):
+    pred_mask = np.zeros(total_length, dtype=bool)
+    true_mask = np.zeros(total_length, dtype=bool)
+
+    for s, e in predict_rois:
+        pred_mask[s:e] = True
+    for s, e in arousal_rois:
+        true_mask[s:e] = True
+
+    tp = np.sum(np.logical_and(pred_mask, true_mask))
+    fp = np.sum(np.logical_and(pred_mask, ~true_mask))
+    fn = np.sum(np.logical_and(~pred_mask, true_mask))
+
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+    return f1_score
+
+
+def inflection_comparison_manual(data, game, roi=False):
+    sessions = data['session_id'].unique()
+    avg_inf_cnt = {
+        'TinyCars': 30,
+        'Solid': 38,
+        'ApexSpeed': 31,
+        'Heist!': 35,
+        'Shootout': 35,
+        'TopDown': 34,
+        "Run'N'Gun": 36,
+        "Pirates!": 28,
+        "Endless": 25
+    }
+    ip_cnt = avg_inf_cnt[game]
+
+    uniform_f2s = []
+    random_f2s = []
+    for session in sessions:
+        arousal = data[data['session_id'] == session]['arousal']
+        inflection_points = find_inflection_points(arousal)
+        # ip_cnt = len(inflection_points)
+
+        uniform_idx = np.linspace(0, len(arousal)-1, ip_cnt, dtype=int)
+        random_idx = np.random.choice(np.arange(len(arousal)), ip_cnt, replace=False)
+
+        if roi:
+            uniform_rois = build_roi_from_inflections(uniform_idx)
+            random_rois = build_roi_from_inflections(random_idx)
+            arousal_rois = build_roi_from_inflections(inflection_points)
+
+            f2_uniform = compute_roi_f1(uniform_rois, arousal_rois, len(arousal))
+            f2_random = compute_roi_f1(random_rois, arousal_rois, len(arousal))
+        else:
+            f2_uniform = compute_inflection_f1(uniform_idx, inflection_points)
+            f2_random = compute_inflection_f1(random_idx, inflection_points)
+        uniform_f2s.append(f2_uniform)
+        random_f2s.append(f2_random)
+    print(f'game: {game}')
+    print(f'uniform_f2s: {np.mean(uniform_f2s)}/{np.std(uniform_f2s)}')
+    print(f'random_f2s: {np.mean(random_f2s)}/{np.std(random_f2s)}')
+    print('-'*50)
+
+
+def build_roi_from_inflections(inflections, window=10, end=400):
+    rois = []
+    for idx in inflections:
+        lower_bound = idx - window if idx - window > 0 else 0
+        upper_bound = idx + window if idx + window < end else end
+        if len(rois) == 0 or lower_bound > rois[-1][1]:
+            if lower_bound < 0:
+                rois.append([0, 2 * window])
+            else:
+                rois.append([lower_bound, upper_bound])
+        else:
+            rois[-1][1] = max(upper_bound, rois[-1][1])
+    return rois
+
+
+def inflection_comparison(root, show=False, epoch=False, roi=False):
     if epoch:
         log_dirs = glob.glob(os.path.join(root, 'test_epc[5-9][0-9]*'))  # recent 10 epochs (epoch 60)
     else:
@@ -195,21 +292,18 @@ def inflection_comparison(root, show=False, epoch=False):
         predict_inflections = np.concatenate([predict_peaks, predict_valleys])
         arousal_inflections = find_inflection_points(arousal_summary)
 
-        unused_predicts = set(predict_inflections)
-        correct_peak_cnt = 0
+        if roi:
+            predict_rois = build_roi_from_inflections(np.sort(predict_inflections))
+            arousal_rois = build_roi_from_inflections(np.sort(arousal_inflections))
 
-        for arousal_inflection in arousal_inflections:
-            # Find candidate predictions within the window
-            candidates = [p for p in unused_predicts if abs(p - arousal_inflection) < 12]
-            if candidates:
-                # Pick the closest one
-                best_match = min(candidates, key=lambda p: abs(p - arousal_inflection))
-                correct_peak_cnt += 1
-                unused_predicts.remove(best_match)
+            for s, e in predict_rois:
+                plt.axvspan(s, e, color='red', alpha=0.2)
+            for s, e in arousal_rois:
+                plt.axvspan(s, e, color='blue', alpha=0.2)
 
-        precision = correct_peak_cnt / len(predict_inflections) if len(predict_inflections) > 0 else 0
-        recall = correct_peak_cnt / len(arousal_inflections) if len(arousal_inflections) > 0 else 0
-        f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+            f1_score = compute_roi_f1(predict_rois, arousal_rois, len(arousal_summary))
+        else:
+            f1_score = compute_inflection_f1(predict_inflections, arousal_inflections)
         f1_scores.append(f1_score)
 
         plt.plot(arousal_summary, label='arousal (ground truth)')
@@ -231,6 +325,7 @@ def inflection_comparison(root, show=False, epoch=False):
         if show:
             plt.show()
     print(f'exp: {root}, f1 score: {np.mean(f1_scores)}({np.std(f1_scores)})')
+    return np.mean(f1_scores), np.std(f1_scores)
 
 
 # TODO: uniform sample/random sample로 interpolation한 것과 결과 비교해볼것, 평균적으로 inflection이 얼마나 발생하는 지 계산해볼것
