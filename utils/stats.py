@@ -447,8 +447,7 @@ def reconstruct_state_via_interpolation(root, show=False, epoch=False):
         if show:
             plt.show()
 
-# make time comparison function
-def compute_time_efficiency(root, player, session):
+def compute_time_efficiency_by_log(root, player, session):
     log_file = os.path.join(root, player, f'{player}_topdown_{session}.csv')
     roi_file = os.path.join(root, player, f'{player}_{session}', 'roi.csv')
 
@@ -464,3 +463,24 @@ def compute_time_efficiency(root, player, session):
 
     time_efficiency = clip_total_duation / total_duration
     return time_efficiency, total_duration, clip_total_duation
+
+
+def compute_time_efficiency(total, rois):
+    clip_total_duation = 0
+    total_duration = 0
+    if type(total) != int:
+        for roi in total:
+            start = roi[0]
+            end = roi[1]
+
+            total_duration += end - start + 1
+    else:
+        total_duration = total
+    for roi in rois:
+        start = roi[0]
+        end = roi[1]
+
+        clip_total_duation += end - start + 1
+
+    time_efficiency = clip_total_duation / total_duration
+    return time_efficiency
