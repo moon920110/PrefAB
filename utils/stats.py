@@ -31,11 +31,18 @@ def calc_correlation_per_player(data):
 
 
 def calc_correlation(data):
-    out = 'arousal_delta'
+    data = data.copy()
+    win_size = 10
+    data = data.select_dtypes(include='number')
+    data['score_delta'] = data['score'].diff()
+    data['score_change_rate'] = data['score_delta'] / data['score'].shift(1)
+    smooth = data.rolling(window=win_size).mean()
+    smooth['arousal'] = data['arousal']
+    # out = 'arousal_delta'
 
-    data.loc[:, out] = data['arousal'].diff()
-    numerics = data.select_dtypes(include='number')
-    corr = numerics.corr()[out]
+    smooth['arousal_delta'] = data['arousal'].diff()
+    # corr = numerics.corr()[out]
+    corr = smooth.corr()['arousal_delta'].sort_values(ascending=False)
 
     return corr
 
