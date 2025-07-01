@@ -252,32 +252,82 @@ def inflection_comparison_manual(data, game, roi=False):
     }
     ip_cnt = avg_inf_cnt[game]
 
-    uniform_f2s = []
-    random_f2s = []
+    uniform_f1s = []
+    random_f1s = []
+    manual_f1s = []
+    te_unit = []
+    te_unia = []
+    te_randt = []
+    te_randa = []
+    te_rulet = []
+    te_rulea = []
     for session in sessions:
-        arousal = data[data['session_id'] == session]['arousal']
+        session_data = data[data['session_id'] == session].copy()
+        arousal = session_data['arousal']
         inflection_points = find_inflection_points(arousal)
         # ip_cnt = len(inflection_points)
 
         uniform_idx = np.linspace(0, len(arousal)-1, ip_cnt, dtype=int)
-        random_idx = np.random.choice(np.arange(len(arousal)), ip_cnt, replace=False)
+        random_idx = np.sort(np.random.choice(np.arange(len(arousal)), ip_cnt, replace=False))
+        rule_based_idx = np.sort(find_combat_points(session_data))
 
         if roi:
-            uniform_rois = build_roi_from_inflections(uniform_idx)
-            random_rois = build_roi_from_inflections(random_idx)
-            arousal_rois = build_roi_from_inflections(inflection_points)
+            uniform_rois = build_roi_from_inflections(uniform_idx, end=len(arousal))
+            random_rois = build_roi_from_inflections(random_idx, end=len(arousal))
+            rule_based_rois = build_roi_from_inflections(rule_based_idx, end=len(arousal))
+            arousal_rois = build_roi_from_inflections(inflection_points, end=len(arousal))
+            te_unit.append(compute_time_efficiency(len(arousal), uniform_rois))
+            te_unia.append(compute_time_efficiency(arousal_rois, uniform_rois))
+            te_randt.append(compute_time_efficiency(len(arousal), random_rois))
+            te_randa.append(compute_time_efficiency(arousal_rois, random_rois))
+            te_rulet.append(compute_time_efficiency(len(arousal), rule_based_rois))
+            te_rulea.append(compute_time_efficiency(arousal_rois, rule_based_rois))
+            # print(f"{session_data['game'].unique()[0]} true rois:{arousal_rois}, rule_rois: {rule_based_rois}")
 
-            f2_uniform = compute_roi_f1(uniform_rois, arousal_rois, len(arousal))
-            f2_random = compute_roi_f1(random_rois, arousal_rois, len(arousal))
+            f1_uniform = compute_roi_f1(uniform_rois, arousal_rois, len(arousal))
+            f1_random = compute_roi_f1(random_rois, arousal_rois, len(arousal))
+            f1_manual = compute_roi_f1(rule_based_rois, arousal_rois, len(arousal))
         else:
-            f2_uniform = compute_inflection_f1(uniform_idx, inflection_points)
-            f2_random = compute_inflection_f1(random_idx, inflection_points)
-        uniform_f2s.append(f2_uniform)
-        random_f2s.append(f2_random)
+            f1_uniform = compute_inflection_f1(uniform_idx, inflection_points)
+            f1_random = compute_inflection_f1(random_idx, inflection_points)
+            f1_manual = compute_inflection_f1(rule_based_idx, inflection_points)
+        uniform_f1s.append(f1_uniform)
+        random_f1s.append(f1_random)
+        manual_f1s.append(f1_manual)
+    uniform_f1mean = np.mean(uniform_f1s)
+    uniform_f1std = np.std(uniform_f1s)
+    random_f1mean = np.mean(random_f1s)
+    random_f1std = np.std(random_f1s)
+    manual_f1mean = np.mean(manual_f1s)
+    manual_f1std = np.std(manual_f1s)
     print(f'game: {game}')
-    print(f'uniform_f2s: {np.mean(uniform_f2s)}/{np.std(uniform_f2s)}')
-    print(f'random_f2s: {np.mean(random_f2s)}/{np.std(random_f2s)}')
+    print(f'uniform_f2s: {uniform_f1mean}/{uniform_f1std}')
+    print(f'random_f2s: {random_f1mean}/{random_f1std}')
+    print(f'manual_f2s: {manual_f1mean}/{manual_f1std}')
     print('-'*50)
+
+    result = {
+        'Uniform': {
+            'f1_mean': uniform_f1mean,
+            'f1_std': uniform_f1std,
+            'per_total': np.mean(te_unit),
+            'per_arousal': np.mean(te_unia),
+        },
+        'Random': {
+            'f1_mean': random_f1mean,
+            'f1_std': random_f1std,
+            'per_total': np.mean(te_randt),
+            'per_arousal': np.mean(te_randa),
+        },
+        'Rule_based': {
+            'f1_mean': manual_f1mean,
+            'f1_std': manual_f1std,
+            'per_total': np.mean(te_rulet),
+            'per_arousal': np.mean(te_rulea),
+        }
+    }
+
+    return result
 
 
 def build_roi_from_inflections(inflections, window=10, end=400):
@@ -320,6 +370,9 @@ def inflection_comparison(root, show=False, epoch=False, roi=False):
 
     # print(log_dict)
     f1_scores = []
+    te_pt = []
+    te_pa = []
+    te_at = []
     for session, tags in log_dict.items():
         arousal_path = tags['arousal']
         predict_path = tags['predict']
@@ -334,13 +387,16 @@ def inflection_comparison(root, show=False, epoch=False, roi=False):
         arousal_inflections = find_inflection_points(arousal_summary)
 
         if roi:
-            predict_rois = build_roi_from_inflections(np.sort(predict_inflections))
-            arousal_rois = build_roi_from_inflections(np.sort(arousal_inflections))
+            predict_rois = build_roi_from_inflections(np.sort(predict_inflections), end=len(predict_summary))
+            arousal_rois = build_roi_from_inflections(np.sort(arousal_inflections), end=len(arousal_summary))
+            te_pt.append(compute_time_efficiency(len(arousal_summary), predict_rois))
+            te_pa.append(compute_time_efficiency(arousal_rois, predict_rois))
+            te_at.append(compute_time_efficiency(len(arousal_summary), arousal_rois))
 
             for s, e in predict_rois:
-                plt.axvspan(s, e, color='red', alpha=0.2)
+                plt.axvspan(s, e, color='green', alpha=0.2)
             for s, e in arousal_rois:
-                plt.axvspan(s, e, color='blue', alpha=0.2)
+                plt.axvspan(s, e, color='red', alpha=0.2)
 
             f1_score = compute_roi_f1(predict_rois, arousal_rois, len(arousal_summary))
         else:
@@ -366,7 +422,14 @@ def inflection_comparison(root, show=False, epoch=False, roi=False):
         if show:
             plt.show()
     print(f'exp: {root}, f1 score: {np.mean(f1_scores)}({np.std(f1_scores)})')
-    return np.mean(f1_scores), np.std(f1_scores)
+    result = {
+        'f1_score': np.mean(f1_scores),
+        'f1_std': np.std(f1_scores),
+        'per_total': np.mean(te_pt),
+        'per_arousal': np.mean(te_pa),
+        'gt_per_total': np.mean(te_at),
+    }
+    return result
 
 
 # TODO: uniform sample/random sample로 interpolation한 것과 결과 비교해볼것, 평균적으로 inflection이 얼마나 발생하는 지 계산해볼것
