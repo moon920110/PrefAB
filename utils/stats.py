@@ -182,6 +182,40 @@ def compute_inflection_f1(predict_inflections, arousal_inflections):
     f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
     return f1_score
 
+def find_combat_points(data):
+    data['score_delta'] = data['score'].diff()
+    # z = zscore(data['score_delta']).fillna(0)
+    # print(data['game'].unique()[0], data[['score', 'score_delta']])
+    data['event_flag'] = (data['score_delta'] != 0).astype(int) # (z > 1).astype(int)
+    # Find the combat intervals
+    event_indices = data.index[data['event_flag'] == 1].to_numpy() - data.index[0]
+
+    # Group contiguous indices (max gap of 2 = 0.5 sec, allows for a gap < 3 sec at 4 FPS)
+    combat_groups = []
+    current_group = [event_indices[0]]
+
+    for i in range(1, len(event_indices)):
+        if event_indices[i] - event_indices[i - 1] <= 8:  # 3 seconds at 4 FPS = 12 frames
+            current_group.append(event_indices[i])
+        else:
+            combat_groups.append(current_group)
+            current_group = [event_indices[i]]
+    combat_groups.append(current_group)
+
+    # Classify each combat segment
+    combat_events = []
+    for group in combat_groups:
+        duration = len(group) / 4  # seconds
+        if duration < 3:
+            mid_idx = group[len(group) // 2]
+            combat_events.append(mid_idx)
+        else:
+            combat_events.append(group[0])
+            combat_events.append(group[-1])
+
+    # print(f"{data['game']}: {combat_events}")
+    return combat_events
+
 
 def compute_roi_f1(predict_rois, arousal_rois, total_length):
     pred_mask = np.zeros(total_length, dtype=bool)
