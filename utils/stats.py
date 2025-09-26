@@ -86,7 +86,7 @@ def get_dtw_cluster(data, config):
             for xx in session_data[p == yi]:
                 ax.plot(xx.ravel(), "k-", alpha=0.3)
             ax.plot(kmeans.cluster_centers_[yi].ravel(), "r-")
-            ax.text(0.0, 0.0, f'Cluster ({yi + 1}): {len(session_data[p == yi])}', transform=ax.transAxes)
+            # ax.text(0.0, 0.0, f'Cluster ({yi + 1}): {len(session_data[p == yi])}', transform=ax.transAxes)
         plt.show()
 
     return session_cluster
@@ -123,6 +123,7 @@ def find_inflection_points(y, t=12, prominence=0, distance=1):
         excluded_mask[start:end + 1] = True
 
     # Find gradient change start points
+    # gradient 변화가 있는데, peak에 속하지 않은 부분들 찾기
     change_points = np.where(np.diff(gradient_signs) != 0)[0] + t  # Adjust index to original scale
     valid_change_points = [cp for cp in change_points if not excluded_mask[cp]]
 
@@ -170,7 +171,7 @@ def compute_inflection_f1(predict_inflections, arousal_inflections):
 
     for arousal_inflection in arousal_inflections:
         # Find candidate predictions within the window
-        candidates = [p for p in unused_predicts if abs(p - arousal_inflection) < 12]
+        candidates = [p for p in unused_predicts if abs(p - arousal_inflection) < 10]
         if candidates:
             # Pick the closest one
             best_match = min(candidates, key=lambda p: abs(p - arousal_inflection))
@@ -237,6 +238,22 @@ def compute_roi_f1(predict_rois, arousal_rois, total_length):
     return f1_score
 
 
+def gt_timeeff(data, game, window):
+    sessions = data['session_id'].unique()
+
+    te = []
+    for session in sessions:
+        session_data = data[data['session_id'] == session].copy()
+        session_data = session_data.iloc[12:]
+        session_data = session_data.sort_values('time_index')
+        arousal = session_data['arousal'].reset_index(drop=True)
+        inflection_points = find_inflection_points(arousal)
+        arousal_rois = build_roi_from_inflections(inflection_points, window=window, end=len(arousal))
+        time_eff = compute_time_efficiency(len(arousal), arousal_rois)
+        te.append(time_eff)
+    print(f'{game} {window}: {np.mean(te)}')
+
+
 def inflection_comparison_manual(data, game, roi=False):
     sessions = data['session_id'].unique()
     avg_inf_cnt = {
@@ -252,18 +269,13 @@ def inflection_comparison_manual(data, game, roi=False):
     }
     ip_cnt = avg_inf_cnt[game]
 
-    uniform_f1s = []
-    random_f1s = []
-    manual_f1s = []
-    te_unit = []
-    te_unia = []
-    te_randt = []
-    te_randa = []
-    te_rulet = []
-    te_rulea = []
+    result = []
+
     for session in sessions:
         session_data = data[data['session_id'] == session].copy()
-        arousal = session_data['arousal']
+        session_data = session_data.iloc[12:]
+        session_data = session_data.sort_values('time_index')
+        arousal = session_data['arousal'].reset_index(drop=True)
         inflection_points = find_inflection_points(arousal)
         # ip_cnt = len(inflection_points)
 
@@ -271,18 +283,22 @@ def inflection_comparison_manual(data, game, roi=False):
         random_idx = np.sort(np.random.choice(np.arange(len(arousal)), ip_cnt, replace=False))
         rule_based_idx = np.sort(find_combat_points(session_data))
 
+        uniform_row = {'sample_type': 'uniform'}
+        random_row = {'sample_type': 'random'}
+        rule_based_row = {'sample_type': 'rule_based'}
+
         if roi:
             uniform_rois = build_roi_from_inflections(uniform_idx, end=len(arousal))
             random_rois = build_roi_from_inflections(random_idx, end=len(arousal))
             rule_based_rois = build_roi_from_inflections(rule_based_idx, end=len(arousal))
             arousal_rois = build_roi_from_inflections(inflection_points, end=len(arousal))
-            te_unit.append(compute_time_efficiency(len(arousal), uniform_rois))
-            te_unia.append(compute_time_efficiency(arousal_rois, uniform_rois))
-            te_randt.append(compute_time_efficiency(len(arousal), random_rois))
-            te_randa.append(compute_time_efficiency(arousal_rois, random_rois))
-            te_rulet.append(compute_time_efficiency(len(arousal), rule_based_rois))
-            te_rulea.append(compute_time_efficiency(arousal_rois, rule_based_rois))
-            # print(f"{session_data['game'].unique()[0]} true rois:{arousal_rois}, rule_rois: {rule_based_rois}")
+            uniform_row['time_eff'] = compute_time_efficiency(len(arousal), uniform_rois)
+            random_row['time_eff'] = compute_time_efficiency(len(arousal), random_rois)
+            rule_based_row['time_eff'] = compute_time_efficiency(len(arousal), rule_based_rois)
+            gt_time_eff = compute_time_efficiency(len(arousal), arousal_rois)
+            uniform_row['gt_time_eff'] = gt_time_eff
+            random_row['gt_time_eff'] = gt_time_eff
+            rule_based_row['gt_time_eff'] = gt_time_eff
 
             f1_uniform = compute_roi_f1(uniform_rois, arousal_rois, len(arousal))
             f1_random = compute_roi_f1(random_rois, arousal_rois, len(arousal))
@@ -291,42 +307,67 @@ def inflection_comparison_manual(data, game, roi=False):
             f1_uniform = compute_inflection_f1(uniform_idx, inflection_points)
             f1_random = compute_inflection_f1(random_idx, inflection_points)
             f1_manual = compute_inflection_f1(rule_based_idx, inflection_points)
-        uniform_f1s.append(f1_uniform)
-        random_f1s.append(f1_random)
-        manual_f1s.append(f1_manual)
-    uniform_f1mean = np.mean(uniform_f1s)
-    uniform_f1std = np.std(uniform_f1s)
-    random_f1mean = np.mean(random_f1s)
-    random_f1std = np.std(random_f1s)
-    manual_f1mean = np.mean(manual_f1s)
-    manual_f1std = np.std(manual_f1s)
-    print(f'game: {game}')
-    print(f'uniform_f2s: {uniform_f1mean}/{uniform_f1std}')
-    print(f'random_f2s: {random_f1mean}/{random_f1std}')
-    print(f'manual_f2s: {manual_f1mean}/{manual_f1std}')
-    print('-'*50)
+        uniform_row['f1'] = f1_uniform
+        random_row['f1'] = f1_random
+        rule_based_row['f1'] = f1_manual
 
-    result = {
-        'Uniform': {
-            'f1_mean': uniform_f1mean,
-            'f1_std': uniform_f1std,
-            'per_total': np.mean(te_unit),
-            'per_arousal': np.mean(te_unia),
-        },
-        'Random': {
-            'f1_mean': random_f1mean,
-            'f1_std': random_f1std,
-            'per_total': np.mean(te_randt),
-            'per_arousal': np.mean(te_randa),
-        },
-        'Rule_based': {
-            'f1_mean': manual_f1mean,
-            'f1_std': manual_f1std,
-            'per_total': np.mean(te_rulet),
-            'per_arousal': np.mean(te_rulea),
+        result.append(uniform_row)
+        result.append(random_row)
+        result.append(rule_based_row)
+
+        save_dir = os.path.join('.', 'peak', game)
+        os.makedirs(save_dir, exist_ok=True)
+
+        cand = {
+            'uniform': uniform_idx,
+            'random': random_idx,
+            'rule_based': rule_based_idx
         }
-    }
+        styles = {
+            'uniform': {'marker': 'g*', 'label': 'pred (uniform)'},
+            'random': {'marker': 'g*', 'label': 'pred (random)'},
+            'rule_based': {'marker': 'g*', 'label': 'pred (rule_based)'},
+        }
 
+        for name, idx in cand.items():
+            # 빈 인덱스면 스킵
+            if idx is None or len(idx) == 0:
+                continue
+
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.plot(arousal, label='arousal (ground truth)')
+            ax.plot(inflection_points, arousal[inflection_points], marker="*", color='#b51963',
+                    label='true inflections', linestyle='None', markersize=12)
+            mk = styles[name]['marker']
+            ax.plot(idx, arousal[idx], marker='*', color='#5ba300', # alpha=0.5,
+                    label=styles[name]['label'], linestyle='None', markersize=12)
+
+            if roi:
+                if name == 'rule_based':
+                    predict_rois = rule_based_rois
+                elif name == 'uniform':
+                    predict_rois = uniform_rois
+                else:
+                    predict_rois = random_rois
+
+                ymin, ymax = ax.get_ylim()
+                y_range = ymax - ymin
+                low_band = ymin
+                high_band = ymin + 0.05 * y_range
+
+                for s, e in predict_rois:
+                    plt.axvspan(s, e, ymin=(low_band - ymin)/y_range, ymax=(high_band - ymin)/y_range, color='#5ba300', alpha=0.2)
+                for s, e in arousal_rois:
+                    plt.axvspan(s, e, ymin=(low_band - ymin)/y_range, ymax=(high_band - ymin)/y_range, color='#b51963', alpha=0.2)
+
+            title_roi = " (ROI)" if roi else ""
+            ax.set_title(f"{game}_{session} — {name}{title_roi}")
+            # ax.legend(loc='best')
+            fig.tight_layout()
+
+            out_path = os.path.join(save_dir, f"{session}_{name}.png")
+            fig.savefig(out_path, dpi=300)
+            plt.close(fig)
     return result
 
 
@@ -369,10 +410,8 @@ def inflection_comparison(root, show=False, epoch=False, roi=False):
     font.set_size(14)
 
     # print(log_dict)
-    f1_scores = []
-    te_pt = []
-    te_pa = []
-    te_at = []
+    results = []
+    clip_times = []
     for session, tags in log_dict.items():
         arousal_path = tags['arousal']
         predict_path = tags['predict']
@@ -383,53 +422,73 @@ def inflection_comparison(root, show=False, epoch=False, roi=False):
         _, predict_summary = read_scalar_summary(predict_event_files[0])
 
         predict_peaks, predict_valleys = find_significant_peaks_and_valleys(predict_summary, threshold=0, prominence=0.01)
+        # predict_peaks, predict_valleys = find_significant_peaks_and_valleys(predict_summary, threshold=0.5)
         predict_inflections = np.concatenate([predict_peaks, predict_valleys])
         arousal_inflections = find_inflection_points(arousal_summary)
 
+        row = {}
         if roi:
             predict_rois = build_roi_from_inflections(np.sort(predict_inflections), end=len(predict_summary))
             arousal_rois = build_roi_from_inflections(np.sort(arousal_inflections), end=len(arousal_summary))
-            te_pt.append(compute_time_efficiency(len(arousal_summary), predict_rois))
-            te_pa.append(compute_time_efficiency(arousal_rois, predict_rois))
-            te_at.append(compute_time_efficiency(len(arousal_summary), arousal_rois))
-
-            for s, e in predict_rois:
-                plt.axvspan(s, e, color='green', alpha=0.2)
-            for s, e in arousal_rois:
-                plt.axvspan(s, e, color='red', alpha=0.2)
+            row['time_eff'] = compute_time_efficiency(len(arousal_summary), predict_rois)
+            row['gt_time_eff'] = compute_time_efficiency(len(arousal_summary), arousal_rois)
+            clip_times.append(compute_avg_cliptime(arousal_rois))
 
             f1_score = compute_roi_f1(predict_rois, arousal_rois, len(arousal_summary))
         else:
             f1_score = compute_inflection_f1(predict_inflections, arousal_inflections)
-        f1_scores.append(f1_score)
+        row['f1'] = f1_score
+        results.append(row)
+        plt.figure(figsize=(8, 4))
 
         plt.plot(arousal_summary, label='arousal (ground truth)')
         plt.plot(predict_summary, color='gray', linestyle='--', alpha=0.5, label='predicted arousal')
-        plt.plot(arousal_inflections, arousal_summary[arousal_inflections], "r*", label='true peaks')
-        plt.plot(predict_inflections, predict_summary[predict_inflections], "g*", alpha=0.5, label='predicted peaks')
+        plt.plot(arousal_inflections, arousal_summary[arousal_inflections], marker="*", color='#B51963',
+                 label='true peaks', linestyle='None', markersize=12)
+        plt.plot(predict_inflections, predict_summary[predict_inflections], marker="*", color='#5BA300', # alpha=0.5
+                 label='predicted peaks', linestyle='None', markersize=12)
+
+        if roi:
+            ax = plt.gca()
+            ymin, ymax = ax.get_ylim()
+            y_range = ymax - ymin
+            low_band = ymin
+            high_band = ymin + 0.05 * y_range
+
+            for s, e in predict_rois:
+                plt.axvspan(s, e, ymin=(low_band - ymin) / y_range, ymax=(high_band - ymin) / y_range, color='#5BA300',
+                            alpha=0.2)
+            for s, e in arousal_rois:
+                plt.axvspan(s, e, ymin=(low_band - ymin) / y_range, ymax=(high_band - ymin) / y_range, color='#B51963',
+                            alpha=0.2)
 
         for inflection in predict_inflections:
-            plt.vlines(inflection, arousal_summary[inflection], predict_summary[inflection], colors='green', linestyles=':', alpha=0.5)
+            plt.vlines(inflection, arousal_summary[inflection], predict_summary[inflection], colors='#5BA300', linestyles=':', alpha=0.5)
 
         plt.title(f"{root.split('/')[-1]}_{session}")
-        plt.legend()
+        # plt.legend()
+        plt.tight_layout()
 
-        save_dir = os.path.join('/', *root.split('/')[:-1], 'peak', root.split('/')[-1])
+        save_dir = os.path.join('/', *root.split('/')[:-1], 'peak_nolegend', root.split('/')[-1])
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
 
-        plt.savefig(os.path.join(save_dir, f'{session}.png'))
+        plt.savefig(os.path.join(save_dir, f'{session}.png'), dpi=300)
         if show:
             plt.show()
-    print(f'exp: {root}, f1 score: {np.mean(f1_scores)}({np.std(f1_scores)})')
-    result = {
-        'f1_score': np.mean(f1_scores),
-        'f1_std': np.std(f1_scores),
-        'per_total': np.mean(te_pt),
-        'per_arousal': np.mean(te_pa),
-        'gt_per_total': np.mean(te_at),
-    }
-    return result
+
+    avg_clip_time = []
+    avg_clip_counts = []
+    less_than_6 = []
+    for clip_time in clip_times:
+        avg_clip_time.append(np.mean(clip_time))
+        avg_clip_counts.append(np.mean(len(clip_time)))
+        less_than_6.append(len([c for c in clip_time if c < 30]))
+    print(f'Average clip time: {np.mean(avg_clip_time)}')
+    print(f'Average clip counts: {np.mean(avg_clip_counts)}')
+    print(f'Average num of clips less than 6: {np.mean(less_than_6)}')
+
+    return results
 
 
 # TODO: uniform sample/random sample로 interpolation한 것과 결과 비교해볼것, 평균적으로 inflection이 얼마나 발생하는 지 계산해볼것
@@ -545,5 +604,17 @@ def compute_time_efficiency(total, rois):
 
         clip_total_duation += end - start + 1
 
-    time_efficiency = clip_total_duation / total_duration
+    time_efficiency = clip_total_duation / total_duration if total_duration != 0 else 0
     return time_efficiency
+
+def compute_avg_cliptime(rois):
+    clip_durs = []
+
+    for roi in rois:
+        start = roi[0]
+        end = roi[1]
+
+        clip_durs.append(end - start + 1)
+
+
+    return clip_durs

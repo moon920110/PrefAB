@@ -55,56 +55,58 @@ def find_peak_demo():
             break
 
 
-def post_analysis_demo(case='None', vis=True):
-
-    dirs = os.listdir('/home/jovyan/projects/PrefAB/log/test/comparison')
+def post_analysis_demo(case='None', vis=True, roi=False, logs=None):
+    game_names = {
+        'tinycars': 'TinyCars',
+        'solid': 'Solid',
+        'apex': 'ApexSpeed',
+        'heist': 'Heist!',
+        'shootout': 'Shootout',
+        'topdown': 'TopDown',
+        'runngun': "Run'N'Gun",
+        'pirates': "Pirates!",
+        'endless': "Endless",
+    }
+    # dirs = os.listdir('/home/jovyan/projects/PrefAB/log/test/comparison')
+    dirs = [
+        '/Users/supermoon/Documents/Research/Affective AI/preference-based low-budget annotation/experiment/log/test/comparison/prefab_v2_topdown_train',
+        '/Users/supermoon/Documents/Research/Affective AI/preference-based low-budget annotation/experiment/log/test/comparison/regression_topdown_train',
+        # '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobio_test',
+        # '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobio_train',
+        # '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_noaux_1_test',
+        # '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_noaux_1_train',
+        # '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobioaux_test',
+        # '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobioaux_train',
+    ]
     # dirs = [
-    #     '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobio_test',
-    #     '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobio_train',
-    #     '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_noaux_1_test',
-    #     '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_noaux_1_train',
-    #     '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobioaux_test',
-    #     '/home/jovyan/projects/PrefAB/log/test/prefab_v2_topdown_nobioaux_train',
+    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_topdown_noaux_1',
+    #     '/home/jovyan/projects/PrefAB/log/',
     # ]
-    # dirs = [
-    #     '/home/jovyan/projects/PrefAB/log/regression_tinycars',
-    #     '/home/jovyan/projects/PrefAB/log/regression_solid',
-    #     '/home/jovyan/projects/PrefAB/log/regression_apex',
-    #     '/home/jovyan/projects/PrefAB/log/regression_heist',
-    #     '/home/jovyan/projects/PrefAB/log/regression_shootout',
-    #     '/home/jovyan/projects/PrefAB/log/regression_topdown',
-    #     '/home/jovyan/projects/PrefAB/log/regression_runngun',
-    #     '/home/jovyan/projects/PrefAB/log/regression_pirates',
-    #     '/home/jovyan/projects/PrefAB/log/regression_endless',
-    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_tinycars',
-    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_solid',
-    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_apex_legacy',
-    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_heist',
-    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_shootout',
-    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_topdown',
-    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_runngun',
-    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_pirates',
-    #     '/home/jovyan/projects/PrefAB/log/prefab_v2_endless',
-    #     ]
-    df = pd.DataFrame(columns=['model', 'game', 'phase', 'mean', 'std'])
     for idx, item in enumerate(dirs):
-        if not item.startswith('prefab') and not item.startswith('regression'):
-            continue
-        model = item.split('_')[0]
-        game = item.split('_')[-2]
-        data = item.split('_')[-1]
+        # if not item.startswith('prefab') and not item.startswith('regression'):
+        #     continue
+        # model = item.split('_')[0]
+        # game = game_names[item.split('_')[-2]]
+        # data = item.split('_')[-1]
+        model = ''
+        game = 'topdown'
+        data = item.split('/')[-1]
         # if model != 'prefab_v2_topdown':
-        path = os.path.join('/home/jovyan/projects/PrefAB/log/test/comparison', item)
-        # path = item
+        # path = os.path.join('/home/jovyan/projects/PrefAB/log/test/comparison', item)
+        path = item
         # inflection_comparison(dir)
         if case == 'Comparison':
-            m, std = inflection_comparison(path, vis, False, True)
-            # insert into df
-            df.loc[idx] = [model, game, data, m, std]
+            result = inflection_comparison(path, vis, False, roi)
+            if logs is not None:
+                for row in result:
+                    row['game'] = game
+                    row['sample_type'] = f'{model}_{data}'
+                    row = pd.DataFrame(row, index=[0])
+                    logs = pd.concat([logs, row], ignore_index=True)
 
         elif case == 'Reconstruction':
             reconstruct_state_via_interpolation(item[0], vis, item[1])
-    df.to_csv(f'/home/jovyan/projects/PrefAB/log/test/comparison/results.csv', index=False)
+    return logs
 
 
 def video_frame_extractor_main():
@@ -182,7 +184,7 @@ def time_efficiency_demo():
         for session in sessions:
             dir_name = os.path.join(root, player, f'{player}_{session}')
             if os.path.exists(dir_name):
-                efficiency, total_duration, clip_duration = compute_time_efficiency(root, player, session)
+                efficiency, total_duration, clip_duration = compute_time_efficiency_by_log(root, player, session)
                 print(f'{player}_{session}: efficiency: {efficiency} ({clip_duration} / {total_duration})')
                 result = {
                     'efficiency': efficiency,
@@ -218,7 +220,7 @@ def auto_test(config):
     for game, acronym in games.items():
         exps = [[f'regression_{acronym}', 'non_ordinal'],
                 # [f'prefab_{acronym}_re', 'prefab'],
-                [f'prefab_v2_{acronym}', 'prefab']
+                # [f'prefab_v2_{acronym}', 'prefab']
                 ]
 
         config['train']['game'] = game
@@ -240,15 +242,39 @@ def auto_test(config):
                     shutil.rmtree(os.path.join(config['test']['log_dir'], f"{exp}_test"))
 
 
-def manual_inflection_comparison_test(config):
+def manual_inflection_comparison_test(config, roi=False, log=None):
+    again = AgainReader(config)
+    games = config['game_name'].keys()
+
+    print('manual inflection comparison test')
+    for game in games:
+        if game != 'TopDown':
+            continue
+        data = again.game_info_by_name(game)
+        result = inflection_comparison_manual(data, game, roi)
+        if log is not None:
+            for row in result:
+                row['game'] = game
+                row = pd.DataFrame(row, index=[0])
+                log = pd.concat([log, row], ignore_index=True)
+    return log
+
+def get_corr(config):
     again = AgainReader(config)
     games = config['game_name'].keys()
 
     print('manual inflection comparison test')
     for game in games:
         data = again.game_info_by_name(game)
-        inflection_comparison_manual(data, game, True)
+        corr = calc_correlation(data)
+        print(f'{game}: {corr}')
 
+def get_gt_timeeff(config, window):
+    again = AgainReader(config)
+    games = config['game_name'].keys()
+    for game in games:
+        data = again.game_info_by_name(game)
+        gt_timeeff(data, game, window)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PrefAB prototype')
@@ -258,9 +284,15 @@ if __name__ == '__main__':
     with open(args.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
-    auto_test(config)
-    # manual_inflection_comparison_test(config)
-    # post_analysis_demo('Comparison', False)
+    # make a new pandas dataframe with column names
+    logs = pd.DataFrame(columns=['game', 'sample_type', 'f1', 'time_eff', 'gt_time_eff'])
+
+    # get_gt_timeeff(config, 16)
+    # auto_test(config)
+    logs = manual_inflection_comparison_test(config, True, logs)
+    # get_corr(config)
+    logs = post_analysis_demo('Comparison', False, True, logs)
+    # pd.DataFrame(logs).to_csv('prefab_ablation_pointwise_raw.csv', index=False)
     # tsne_demo(config, 'test')
     # tsne_demo(config, 'train')
     # time_efficiency_demo()
