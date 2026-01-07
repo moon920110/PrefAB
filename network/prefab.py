@@ -163,7 +163,7 @@ class Prefab(nn.Module):
 
         if self.mode == 'prefab' or self.mode == 'non_ordinal':
             reshaped_img = img.view(-1, *img.shape[2:])  # batch, win_size, c, h, w => batch * win_size, c, h, w
-            e, d = self.autoencoder(reshaped_img)
+            e, _ = self.autoencoder(reshaped_img)
             e = e.view(int(e.shape[0]/self.window_size), self.window_size, -1)
 
             e2 = self.extractor(e.view(-1, e.shape[-1]))
@@ -177,7 +177,7 @@ class Prefab(nn.Module):
 
         elif self.mode == 'image':
             reshaped_img = img.view(-1, *img.shape[2:])  # batch, win_size, c, h, w => batch * win_size, c, h, w
-            e, d = self.autoencoder(reshaped_img)
+            e, _ = self.autoencoder(reshaped_img)
             e = e.view(int(e.shape[0] / self.window_size), self.window_size, -1)
 
             e2 = self.extractor(e.view(-1, e.shape[-1]))
@@ -194,7 +194,6 @@ class Prefab(nn.Module):
 
             x = self.transformer_encoder(ti)
             avg_pooled = torch.mean(x, dim=1)
-            d = None
         z = avg_pooled * film_gamma + film_beta
         x = self.main_fc(z)
         if self.config['train']['ablation']['aux']:
@@ -203,8 +202,8 @@ class Prefab(nn.Module):
             a = self.aux_fc(z)
 
         if test:
-            return x, a, d, z
-        return x, a, d
+            return x, a, z
+        return x, a
 
 
 
