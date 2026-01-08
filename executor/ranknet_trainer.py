@@ -124,10 +124,9 @@ class RanknetTrainer:
             sampler=val_sampler,
             num_workers=self.config['train']['num_workers'],
             shuffle=False,
-            pin_memory=True,
+            pin_memory=False,
             drop_last=True
         )
-
 
     def train(self):
         writer = None
@@ -162,15 +161,6 @@ class RanknetTrainer:
             iterator = tqdm(enumerate(self.train_loader), desc=f'Training Epoch {epc}',
                             disable=not self.accelerator.is_main_process, total=len_train_loader)
             for i, (img1, feature1, img2, feature2, bio, label, aux_label) in iterator:
-                ### Accelerator will automatically move the data to the device
-                # img1 = img1.to(self.device)
-                # feature1 = feature1.to(self.device)
-                # img2 = img2.to(self.device)
-                # feature2 = feature2.to(self.device)
-                # label = label.to(self.device)
-                # bio = bio.to(self.device)
-                # aux_label = aux_label.to(self.device)
-
                 l0_cnt += len(label[label == 0])
                 l1_cnt += len(label[label == 1])
                 l2_cnt += len(label[label == 2])
@@ -246,16 +236,12 @@ class RanknetTrainer:
                     total=len(self.val_loader)
                 )
                 for i, (img1, feature1, img2, feature2, bio, label, aux_label) in iterator:
-                    # img1 = img1.to(self.device)
-                    # feature1 = feature1.to(self.device)
-                    # img2 = img2.to(self.device)
-                    # feature2 = feature2.to(self.device)
-                    # label = label.to(self.device)
-                    # bio = bio.to(self.device)
-                    # aux_label = aux_label.to(self.device)
-
-                    o1, a_o1 = self.model(img1, feature1, bio)
-                    o2, a_o2 = self.model(img2, feature2, bio)
+                    img_cat = torch.cat([img1, img2], dim=0)
+                    feature_cat = torch.cat([feature1, feature2], dim=0)
+                    bio_cat = torch.cat([bio, bio], dim=0)
+                    o_cat, a_o_cat = self.model(img_cat, feature_cat, bio_cat)
+                    o1, o2 = torch.chunk(o_cat, 2, dim=0)
+                    a_o1, a_o2 = torch.chunk(a_o_cat, 2, dim=0)
                     o = o2 - o1
 
                     # acc, cm_tmp = metric(o, label, self.config['train']['cutpoints'])

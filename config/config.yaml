@@ -1,5 +1,5 @@
 description: |
-  PREFAB+ baseline
+  PREFAB+ baseline; CUDA 12.x
 
 data:
   path: /home/jovyan/data/AGAIN
@@ -44,14 +44,14 @@ train:
   focal_gamma: 5
   epoch: 60
   num_transform_layers: 6
-  batch_size: 24  # A100 (40G): 24, V100 (32G): 16
+  batch_size: 48  # A100 (40G): 24, V100 (32G): 16
   train_ratio: 0.8
   window_size: 12
   window_stride: 4
   ae_loss_weight: 0.001
   aux_loss_weight: 0.01
   dropout: 0.2  # 0.5 is trash
-  num_workers: 16
+  num_workers: 8
   bio_embedding_dim: 4
   d_model: 200
   schedule: 20
@@ -62,6 +62,10 @@ train:
   ablation:
       film: false
       aux: false
+  generalization:
+      activate: false  # if activated, PREFAB will use all features
+      train_games: []
+      test_games: []
   mixed_precision: "no" # no, fp16, bf16
 
 test:
