@@ -59,8 +59,8 @@ class CardinalTrainer(BaseTrainer):
                 self.optimizer.step()
 
                 # Metrics (Regression R2)
-                acc = metric(o.detach(), label.detach(), infer_type='regression')
-                aux_acc, _ = metric(a_o.detach(), aux_label.detach(), infer_type='classification')
+                acc = metric(o, label, infer_type='regression')
+                aux_acc, _ = metric(a_o, aux_label, infer_type='classification')
 
                 if writer:
                     writer.add_scalar(f'train/main_loss', main_loss.item(), epc * self.len_train_loader + i)
