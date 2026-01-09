@@ -2,7 +2,8 @@ import os
 import numpy as np
 import h5py
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
-from sklearn.metrics import confusion_matrix, accuracy_score, r2_score
+from sklearn.metrics import confusion_matrix, accuracy_score, r2_score, f1_score
+from scipy.stats import kendalltau
 
 
 def create_new_filename(root, base_name):
@@ -33,23 +34,29 @@ def read_scalar_summary(log_dir):
 
 
 def metric(y_pred, y_true, cutpoints=None, infer_type='ranknet'):
-    if infer_type == 'ranknet':
-        _y_pred = y_pred.cpu().detach().numpy()
+    if infer_type == "ranknet":
+        _y_pred = y_pred.detach().cpu().numpy()
         _y_pred = np.where(_y_pred < cutpoints[0], 0, np.where(_y_pred < cutpoints[1], 1, 2))
 
-        _y_true = y_true.cpu().detach().numpy()
-        acc = accuracy_score(_y_true, _y_pred)
+        _y_true = y_true.detach().cpu().numpy()
+        acc = f1_score(_y_true, _y_pred, average='macro')
         cm = confusion_matrix(_y_true, _y_pred, labels=[0, 1, 2])
 
         return acc, cm
 
-    elif infer_type == 'regression':
-        return r2_score(y_true.cpu().detach().numpy(), y_pred.cpu().detach().numpy())
+    elif infer_type == "regression":
+        return r2_score(y_true.detach().cpu().numpy(), y_pred.detach().cpu().numpy())
+
+    elif infer_type == "kendal_tau":
+        _y_pred = y_pred.detach().cpu().numpy()
+        _y_true = y_true.detach().cpu().numpy()
+        tau, p_val = kendalltau(_y_true, _y_pred, nan_policy='omit')
+        return tau, p_val
 
     else:  # classification (bio-4 classes)
-        _y_pred = y_pred.cpu().detach().numpy()
+        _y_pred = y_pred.detach().cpu().numpy()
         _y_pred = _y_pred.argmax(axis=-1)
-        _y_true = y_true.cpu().detach().numpy()
+        _y_true = y_true.detach().cpu().numpy()
 
         acc = accuracy_score(_y_true, _y_pred)
         cm = confusion_matrix(_y_true, _y_pred, labels=[0, 1, 2, 3])

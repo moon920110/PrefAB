@@ -85,7 +85,8 @@ class RanknetTrainer(BaseTrainer):
                 self.accelerator.backward(loss)
                 self.optimizer.step()
 
-                acc, cm_tmp = metric(o.detach(), label.detach(), self.rank_criterion.get_cutpoints())
+                acc, cm_tmp = metric(o, label, self.rank_criterion.get_cutpoints())
+                tau, p_val = metric(o, label, infer_type='kendal_tau')
                 aux_acc1, _ = metric(a_o1, aux_label, infer_type='classification')
                 aux_acc2, _ = metric(a_o2, aux_label, infer_type='classification')
                 cm += cm_tmp
@@ -93,7 +94,9 @@ class RanknetTrainer(BaseTrainer):
                 if writer:
                     writer.add_scalar(f'train/ranknet_loss', ranknet_loss.item(), epc * self.len_train_loader + i)
                     writer.add_scalar(f'train/aux_loss', aux_loss.item(), epc * self.len_train_loader + i)
-                    writer.add_scalar(f'train/accuracy', acc, epc * self.len_train_loader + i)
+                    writer.add_scalar(f'train/accuracy (f1)', acc, epc * self.len_train_loader + i)
+                    writer.add_scalar(f'train/kendal tau', tau, epc * self.len_train_loader + i)
+                    writer.add_scalar(f'train/kendal tau_p', p_val, epc * self.len_train_loader + i)
                     writer.add_scalar(f'train/aux_accuracy_1', aux_acc1, epc * self.len_train_loader + i)
                     writer.add_scalar(f'train/aux_accuracy_2', aux_acc2, epc * self.len_train_loader + i)
                     writer.add_scalar(f'train/loss', loss.item(), epc * self.len_train_loader + i)
@@ -129,13 +132,16 @@ class RanknetTrainer(BaseTrainer):
                     o = o2 - o1
 
                     acc, cm_tmp = metric(o, label, self.rank_criterion.get_cutpoints())
+                    tau, p_val = metric(o, label, infer_type='kendal_tau')
                     aux_acc1, _ = metric(a_o1, aux_label, infer_type='classification')
                     aux_acc2, _ = metric(a_o2, aux_label, infer_type='classification')
 
                     cm += cm_tmp
                     accs += acc
                     if writer:
-                        writer.add_scalar(f'val/accuracy', acc, epc * self.len_val_loader + i)
+                        writer.add_scalar(f'val/accuracy (f1)', acc, epc * self.len_val_loader + i)
+                        writer.add_scalar(f'val/kendal tau', tau, epc * self.len_val_loader + i)
+                        writer.add_scalar(f'val/kendal tau_p', p_val, epc * self.len_val_loader + i)
                         writer.add_scalar(f'val/aux_accuracy_1', aux_acc1, epc * self.len_val_loader + i)
                         writer.add_scalar(f'val/aux_accuracy_2', aux_acc2, epc * self.len_val_loader + i)
 
