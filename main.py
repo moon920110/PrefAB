@@ -19,11 +19,28 @@ from utils.utils import *
 logger = get_logger(__name__)
 
 
-def load_dataset(config):
-    all_dataset, numeric_columns, bio_features_size = AgainReader(config).prepare_sequential_ranknet_dataset()
-    train_size = int(len(all_dataset) * config['train']['train_ratio'])
-    test_size = len(all_dataset) - train_size
-    train_samples, test_samples = torch.utils.data.random_split(all_dataset, [train_size, test_size])
+def load_dataset(config, logger):
+    all_dataset, numeric_columns, bio_features_size, game_metadata = AgainReader(config).prepare_sequential_ranknet_dataset()
+    if config['train']['generalization']['activate']:
+        logger.info("Generalization test")
+        train_list = config['train']['generalization']['train_games']
+
+        games_arr = np.array(game_metadata)
+        train_mask = np.isin(games_arr, train_list)
+
+        all_dataset_np = np.array(all_dataset, dtype=object)
+        train_samples = all_dataset_np[train_mask].tolist()
+        test_samples = all_dataset_np[~train_mask].tolist()
+
+        logger.info(f"Train Games: {list(set(games_arr[train_mask]))}")
+        logger.info(f"Test Games: {list(set(games_arr[~train_mask]))}")
+
+        assert len(train_samples) > 0, f"Train set is empty. Check game names: {train_list}"
+        assert len(test_samples) > 0, f"Test set is empty. All games are assigned to train set"
+    else:  # train and test in a single game
+        train_size = int(len(all_dataset) * config['train']['train_ratio'])
+        test_size = len(all_dataset) - train_size
+        train_samples, test_samples = torch.utils.data.random_split(all_dataset, [train_size, test_size])
 
     train_dataset = PairDataset(train_samples, numeric_columns, bio_features_size, config)
     test_dataset = TestDataset(test_samples, numeric_columns, config)
@@ -31,7 +48,7 @@ def load_dataset(config):
     return train_dataset, test_dataset
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='PrefAB prototype')
+    parser = argparse.ArgumentParser(description='PrefAB')
     parser.add_argument('--config', type=str, default='config/config.yaml')
     args = parser.parse_args()
 
@@ -64,7 +81,7 @@ if __name__ == '__main__':
 
     set_seed(config['train']['seed'])
 
-    train, test = load_dataset(config)
+    train, test = load_dataset(config, logger)
     if config['train']['mode'] == 'non_ordinal':
         trainer = CardinalTrainer(train, test, config=config, logger=logger, accelerator=accelerator)
     else:

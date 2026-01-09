@@ -1,5 +1,6 @@
 description: |
   PREFAB+ baseline; CUDA 12.x
+  Generalization baseline
 
 data:
   path: /home/jovyan/data/AGAIN
@@ -30,13 +31,13 @@ experiment:
   model: ranknet_prefab_v2_topdown_best.pth
 
 train:
-  exp: accelerator_test
+  exp: PREFAB_generalization_shooter_shootout
   log_dir: log/
   save_dir: log/model
   mode: prefab  # prefab: full; image: only image; feature: only feature; non_ordinal: non_ordinal
   label: pair_rank_label  # cluster, arousal, pair_rank_label
   aux_label: cluster
-  domain: game  # genre, game
+  domain: genre  # genre, game
   genre: Shooter  # All, Shooter, Platformer, Racing
   game: Endless
   lr: 0.0001
@@ -63,9 +64,8 @@ train:
       film: false
       aux: false
   generalization:
-      activate: false  # if activated, PREFAB will use all features
-      train_games: []
-      test_games: []
+      activate: true  # if activated, PREFAB will use all features
+      train_games: ['Shootout']  # the rests will be the test set
   mixed_precision: "no" # no, fp16, bf16
 
 test:

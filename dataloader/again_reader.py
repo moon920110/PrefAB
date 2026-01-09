@@ -48,7 +48,7 @@ class CustomReader:
 
 
 class AgainReader:
-    def __init__(self, config=None, logger=None, again_file_name=None):
+    def __init__(self, config=None, logger=None, again_file_name: str=None):
         self.data_path = config['data']['path']
         self.config = config
         self.logger = logger
@@ -108,9 +108,6 @@ class AgainReader:
                 cluster_idx = self.config['clustering']['cluster_sample'] - 1
                 again = again[again['cluster'] == cluster_idx]
 
-            # NOTE: cluster는 추후에 사용할 수 있음
-            # again = again.drop(columns=['cluster'])
-
         return again
 
     def prepare_sequential_ranknet_dataset(self):
@@ -118,8 +115,9 @@ class AgainReader:
         scope = self.config['train']['genre'] if domain == 'genre' else self.config['train']['game']
         data = self._prepare_ordinal_dataset(domain=domain, scope=scope)
         x = []
-        total_iter = len(data['game'].unique()) * len(data['player_id'].unique())
-        pbar = tqdm(total=total_iter, desc='Preparing sequential dataset')
+        game_metadata = []
+        total_iter = len(data['session_id'].unique())
+        pbar = tqdm(total=total_iter, desc='Processing AGAIN dataset to sequential data')
         numeric_columns = data.select_dtypes(include=['number']).columns
 
         self.bio['Genre_idx'] = pd.factorize(self.bio['Genre'])[0]
@@ -147,12 +145,10 @@ class AgainReader:
             if player_bio.empty:
                 continue
 
-            # pads = pd.concat([player_data.iloc[0]] * 3, axis=1).T
-            # player_data = pd.concat([pads, player_data], ignore_index=True)
-
             x.append([player_data, video_full_path, player_bio])
+            game_metadata.append(game)
 
-        return x, numeric_columns, bio_size
+        return x, numeric_columns, bio_size, game_metadata
 
     def game_info_by_genre(self, genre):
         again = self.again[self.again['genre'] == genre].dropna(axis=1, how='any')
