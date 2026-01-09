@@ -178,6 +178,8 @@ class TestDataset(Dataset):
                 self.y.append(y)
                 self.a_y.append(a_y)
 
+        self.player_idx.append(len(self.y))
+
     def sample_player_data(self, size=10):
         p_indices = np.random.choice(len(self.player_idx)-1, size)
         return p_indices
