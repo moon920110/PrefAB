@@ -25,14 +25,17 @@ def cut_video(input_video, start, end, output_video):
     subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
-def parse_images_from_video_by_timestamp(data, video_full_path, video_out_path, transform=False, compression='gzip', compression_level=9):
+def parse_images_from_video_by_timestamp(data, video_full_path, output_path, video_name, transform=False, compression='gzip', compression_level=4):
     cap = cv2.VideoCapture(video_full_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
 
-    with h5py.File(video_out_path, 'w') as f:
-        frame_group = f.create_group('frames')
+    with h5py.File(output_path, 'a') as f:
+        if video_name in f:
+            del f[video_name]
 
-        for _, row in tqdm(data.iterrows(), desc=f'Processing frames'):
+        video_group = f.create_group(video_name)
+
+        for _, row in data.iterrows():
             time_stamp = row['time_stamp']
             frame_offset = int(fps * time_stamp)
 
@@ -45,44 +48,31 @@ def parse_images_from_video_by_timestamp(data, video_full_path, video_out_path, 
                     # resize image to 1/2 size
                     frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frame_group.create_dataset(f'{time_index}_{time_stamp}', data=frame, dtype='uint8',
+                video_group.create_dataset(f'{time_index}_{time_stamp}', data=frame, dtype='uint8',
                                            compression=compression, compression_opts=compression_level)
 
     cap.release()
 
 
-def parse_AGAIN_images(again, config, logger):
+def parse_AGAIN_images(again, config):
     video_path = os.path.join(config['data']['path'], config['data']['vision']['video'])
     out_dir = os.path.join(config['data']['path'], config['data']['vision']['frame'])
+    print(f'Extract images from video: {video_path} -> {out_dir}')
 
-    logger.info(f'Extract images from video: {video_path} -> {out_dir}')
+    sessions = again['session_id'].unique()
 
-    if not os.path.exists(out_dir):
-        os.makedirs(out_dir)
+    for s_i, session in tqdm(enumerate(sessions), total=len(sessions)):
+        data = again[(again['session_id'] == session)]
 
-    games = again['game'].unique()
-    players = again['player_id'].unique()
+        game = data['game'].unique()[0]
+        game_name = config['game_name'][game]
+        player = data['player_id'].unique()[0]
 
-    for g_i, game in enumerate(games):
-        for p_i, player in enumerate(players):
-            data = again[(again['game'] == game) & (again['player_id'] == player)]
-            if len(data) == 0:
-                print(f'There is no data for {game} ({g_i + 1}/{len(games)}) - {player} ({p_i + 1}/{len(players)})')
-                continue
-            session_id = data['session_id'].unique()[0]
-            game_name = config['game_name'][game]
+        video = f'{player}_{game_name}_{session}.mp4'
+        video_name = os.path.splitext(video)[0]
+        video_full_path = os.path.join(video_path, video)
 
-            video = f'{player}_{game_name}_{session_id}.mp4'
-            video_name = os.path.splitext(video)[0]
-            video_full_path = os.path.join(video_path, video)
-            video_out_path = os.path.join(out_dir, f'{video_name}.h5')
-
-            if os.path.exists(video_out_path):
-                continue
-
-            parse_images_from_video_by_timestamp(data, video_full_path, video_out_path, transform=True)
-
-
+        parse_images_from_video_by_timestamp(data, video_full_path, out_dir, video_name, transform=True)
 
 
 if __name__ == '__main__':
@@ -93,7 +83,6 @@ if __name__ == '__main__':
     with open(args.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
-    again = AgainReader(config=config)
-    again_shooter = again.game_info_by_genre('Shooter')
+    again = AgainReader(config=config).again
 
     parse_AGAIN_images(again=again, config=config)

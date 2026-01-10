@@ -5,8 +5,8 @@ description: |
 data:
   path: /home/jovyan/data/AGAIN
   vision:
-    video: video
-    frame: frame_data
+    video: videos_mp4
+    frame: all_frame_data.h5
   img_mean: [ 0.485, 0.456, 0.406 ]
   img_std: [ 0.229, 0.224, 0.225 ]
   transform_size: [320, 480]
