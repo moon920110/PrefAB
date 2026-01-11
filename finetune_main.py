@@ -51,7 +51,7 @@ if __name__ == '__main__':
     if not os.path.exists(os.path.join(config['train']['log_dir'], f"{config['train']['exp']}")):
         os.makedirs(os.path.join(config['train']['log_dir'], f"{config['train']['exp']}"))
 
-    train_samples, numeric_columns, bio_features_size = AgainReader(config, again_file_name='clean_data_custom_train.csv').prepare_sequential_ranknet_dataset()
+    train_samples, numeric_columns, bio_features_size = AgainReader(config, again_file_name='clean_data_custom.csv').prepare_sequential_ranknet_dataset()
     test_samples, _, _ = AgainReader(config, again_file_name='clean_data_custom_test.csv').prepare_sequential_ranknet_dataset()
 
     train_dataset = PairDataset(train_samples, numeric_columns, bio_features_size, config)

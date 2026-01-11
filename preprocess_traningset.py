@@ -11,7 +11,7 @@ def preprocess(config, logger):
     logger.info(f'player: {player}, session: {session}')
 
     cleaned_log = cleaning_logs(config, logger)
-    parse_AGAIN_images(cleaned_log, config, logger)
+    # parse_AGAIN_images(cleaned_log, config, logger)
 
     integrate_arousal(config)
 
@@ -57,13 +57,14 @@ if __name__ == '__main__':
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 
-    players = [f'p{i}' for i in range(1, 26)]
-    sessions = [f's{i}' for i in range(1, 5)]
-    for player in players:
-        for session in sessions:
-            config['experiment']['player'] = player
-            config['experiment']['session'] = f'{player}{session}'
-            if not os.path.exists(os.path.join('data/clean_data', f'{player}_topdown_{player}{session}_clean.csv')):
-                preprocess(config, logger)
+    # players = [f'p{i}' for i in range(1, 26)]
+    # sessions = [f's{i}' for i in range(1, 5)]
+    # for player in players:
+    #     for session in sessions:
+            # config['experiment']['player'] = player
+            # config['experiment']['session'] = f'{player}{session}'
+            # if not os.path.exists(os.path.join('data/clean_data', f'{player}_topdown_{player}{session}_clean.csv')):
+            #     preprocess(config, logger)
 
-    migrate_clean_data()
+    preprocess(config, logger)
+    # migrate_clean_data()

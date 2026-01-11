@@ -84,6 +84,7 @@ class BaseTrainer:
             num_workers=self.config['train']['num_workers'],
             shuffle=(train_sampler is None),
             pin_memory=True,
+            persistent_workers=True,
             drop_last=True
         )
         self.val_loader = DataLoader(
@@ -92,7 +93,7 @@ class BaseTrainer:
             sampler=val_sampler,
             num_workers=self.config['train']['num_workers'],
             shuffle=False,
-            pin_memory=False,
+            pin_memory=True,
             drop_last=True
         )
 

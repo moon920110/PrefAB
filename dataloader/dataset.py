@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import h5py
 import torch
@@ -23,11 +24,15 @@ class PairDataset(Dataset):
         self.y = []
         self.a_y = []
 
+        self.h5_path = os.path.join(config['data']['path'], config['data']['vision']['frame'])
+        self.h5_file = None
+
         self.transform = transforms.Compose([
             transforms.Resize(self.config['data']['transform_size']),
             transforms.ToTensor(),
             transforms.Normalize(mean=self.config['data']['img_mean'], std=self.config['data']['img_std'])
         ])
+        self.pil_to_tensor = transforms.PILToTensor()
 
         self.init_sequence_dataset()
 
@@ -77,6 +82,10 @@ class PairDataset(Dataset):
                     self.a_y.append(a_y)
                     self.y.append(y)
 
+    def _get_h5(self):
+        if self.h5_file is None:
+            self.h5_file = h5py.File(self.h5_path, 'r', swmr=True, libver='latest')
+        return self.h5_file
 
     def __len__(self):
         return len(self.y)
@@ -101,27 +110,26 @@ class PairDataset(Dataset):
         bio = self.x_bio[idx]
         a_y = self.a_y[idx]
 
-        img_path, time_indices, time_stamps = img_data
+        video_name, time_indices, time_stamps = img_data
+        f = self._get_h5()
 
         if self.config['train']['mode'] == 'non_ordinal':
-            with h5py.File(img_path, 'r') as f:
-                # (sequence, height, width, channel)
-                frames = torch.stack(
-                    [self.transform(Image.fromarray(np.array(f[f'frames/{time_index}_{time_stamp}'])))
-                     for time_index, time_stamp in zip(time_indices, time_stamps)])
-                # (sequence, height, width, channel) to (sequence, channel, height, width) // open cv BGR format 0~255
+            # (sequence, height, width, channel)
+            frames = torch.stack(
+                [self.transform(Image.fromarray(np.array(f[f'{video_name}/{time_index}_{time_stamp}'])))
+                 for time_index, time_stamp in zip(time_indices, time_stamps)])
+            # (sequence, height, width, channel) to (sequence, channel, height, width) // open cv BGR format 0~255
 
             return frames, torch.tensor(meta), torch.tensor(bio), torch.tensor(y), torch.tensor(a_y)
         else:
-            with h5py.File(img_path, 'r') as f:
-                # (sequence, height, width, channel)
-                compare_frames = torch.stack(
-                    [self.transform(Image.fromarray(np.array(f[f'frames/{time_index}_{time_stamp}'])))
-                     for time_index, time_stamp in zip(time_indices[:self.window_size], time_stamps[:self.window_size])])
-                # (sequence, height, width, channel) to (sequence, channel, height, width) // open cv BGR format 0~255
-                main_frames = torch.stack(
-                    [self.transform(Image.fromarray(np.array(f[f'frames/{time_index}_{time_stamp}'])))
-                     for time_index, time_stamp in zip(time_indices[-self.window_size:], time_stamps[-self.window_size:])])
+            # (sequence, height, width, channel)
+            compare_frames = torch.stack(
+                [self.transform(Image.fromarray(np.array(f[f'{video_name}/{time_index}_{time_stamp}'])))
+                 for time_index, time_stamp in zip(time_indices[:self.window_size], time_stamps[:self.window_size])])
+            # (sequence, height, width, channel) to (sequence, channel, height, width) // open cv BGR format 0~255
+            main_frames = torch.stack(
+                [self.transform(Image.fromarray(np.array(f[f'{video_name}/{time_index}_{time_stamp}'])))
+                 for time_index, time_stamp in zip(time_indices[-self.window_size:], time_stamps[-self.window_size:])])
 
             # 4, 3, 320, 480 [frames]
             return compare_frames, \
@@ -131,6 +139,10 @@ class PairDataset(Dataset):
                 torch.tensor(bio), \
                 torch.tensor(y), \
                 torch.tensor(a_y)
+
+    def __del__(self):
+        if self.h5_file is not None:
+            self.h5_file.close()
 
 
 class TestDataset(Dataset):
@@ -147,6 +159,9 @@ class TestDataset(Dataset):
         self.bio = []
         self.player_idx = []
 
+        self.h5_path = os.path.join(config['data']['path'], config['data']['vision']['frame'])
+        self.h5_file = None
+
         self.transform = transforms.Compose([
             transforms.Resize(self.config['data']['transform_size']),
             transforms.ToTensor(),
@@ -156,7 +171,7 @@ class TestDataset(Dataset):
         self.init_sequence_dataset()
 
     def init_sequence_dataset(self):
-        for player_data, img_path, bio in tqdm(self.dataset, desc=f'Preparing sequential dataset for validation'):  # for each game and player
+        for player_data, img_path, bio in tqdm(self.dataset, desc=f'Preparing sequential dataset for test'):  # for each game and player
             if len(player_data) == 0:
                 continue
 
@@ -187,6 +202,11 @@ class TestDataset(Dataset):
     def get_meta_feature_size(self):
         return self.x_meta[0].shape[-1]
 
+    def _get_h5(self):
+        if self.h5_file is None:
+            self.h5_file = h5py.File(self.h5_path, 'r', swmr=True, libver='latest')
+        return self.h5_file
+
     def __len__(self):
         return len(self.y)
 
@@ -197,13 +217,14 @@ class TestDataset(Dataset):
         bio = self.bio[idx]
         a_y = self.a_y[idx]
 
-        img_path, time_indices, time_stamps = img_data
-        with h5py.File(img_path, 'r') as f:
-            # (sequence, height, width, channel)
-            frames = torch.stack(
-                [self.transform(Image.fromarray(np.array(f[f'frames/{time_index}_{time_stamp}'])))
-                 for time_index, time_stamp in zip(time_indices[:self.window_size], time_stamps[:self.window_size])])
-            # (sequence, height, width, channel) to (sequence, channel, height, width) // open cv BGR format 0~255
+        f = self._get_h5()
+
+        video_name, time_indices, time_stamps = img_data
+        # (sequence, height, width, channel)
+        frames = torch.stack(
+            [self.transform(Image.fromarray(np.array(f[f'{video_name}/{time_index}_{time_stamp}'])))
+             for time_index, time_stamp in zip(time_indices[:self.window_size], time_stamps[:self.window_size])])
+        # (sequence, height, width, channel) to (sequence, channel, height, width) // open cv BGR format 0~255
 
         # 4, 3, 320, 480 [frames]
         return frames, \
@@ -211,6 +232,10 @@ class TestDataset(Dataset):
             torch.tensor(bio), \
             torch.tensor(y), \
             torch.tensor(a_y)
+
+    def __del__(self):
+        if self.h5_file is not None:
+            self.h5_file.close()
 
 
 class BioDataset(Dataset):
