@@ -135,8 +135,8 @@ class AgainReader:
             game = player_data['game'].unique()[0]
             if len(player_data) == 0:
                 continue
-            video_name = f'{player}_{self.config["game_name"][game]}_{player_data["session_id"].unique()[0]}.h5'
-            video_full_path = os.path.join(self.data_path, self.config['data']['vision']['frame'], video_name)
+            video_name = f'{player}_{self.config["game_name"][game]}_{session}'
+            # video_full_path = os.path.join(self.data_path, self.config['data']['vision']['frame'], video_name)
 
             player_data = player_data.sort_values('time_index')
 
@@ -145,7 +145,7 @@ class AgainReader:
             if player_bio.empty:
                 continue
 
-            x.append([player_data, video_full_path, player_bio])
+            x.append([player_data, video_name, player_bio])
             game_metadata.append(game)
 
         return x, numeric_columns, bio_size, game_metadata

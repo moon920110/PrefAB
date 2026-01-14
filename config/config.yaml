@@ -5,8 +5,8 @@ description: |
 data:
   path: /home/jovyan/data/AGAIN
   vision:
-    video: video
-    frame: frame_data
+    video: videos_mp4
+    frame: all_frame_data.h5
   img_mean: [ 0.485, 0.456, 0.406 ]
   img_std: [ 0.229, 0.224, 0.225 ]
   transform_size: [320, 480]
@@ -31,7 +31,7 @@ experiment:
   model: ranknet_prefab_v2_topdown_best.pth
 
 train:
-  exp: PREFAB_generalization_shooter_shootout
+  exp: optimization_debug
   log_dir: log/
   save_dir: log/model
   mode: prefab  # prefab: full; image: only image; feature: only feature; non_ordinal: non_ordinal
@@ -40,12 +40,12 @@ train:
   domain: genre  # genre, game
   genre: Shooter  # All, Shooter, Platformer, Racing
   game: Endless
-  lr: 0.0001
+  lr: 0.001
   focal_alpha: 1
   focal_gamma: 5
   epoch: 60
   num_transform_layers: 6
-  batch_size: 48  # A100 (40G): 24, V100 (32G): 16
+  batch_size: 48  # A100 (40G): 64 (for bf16), V100 (32G): 16
   train_ratio: 0.8
   window_size: 12
   window_stride: 4
@@ -66,7 +66,7 @@ train:
   generalization:
       activate: true  # if activated, PREFAB will use all features
       train_games: ['Shootout']  # the rests will be the test set
-  mixed_precision: "no" # no, fp16, bf16
+  mixed_precision: "bf16" # no, fp16, bf16
 
 test:
   label: arousal  # cluster, arousal, pair_rank_label

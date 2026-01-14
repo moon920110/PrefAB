@@ -48,7 +48,11 @@ class BaseTrainer:
 
     def _setup_optimizer_and_scheduler(self):
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['train']['lr'])
-        self.scheduler = lr_scheduler.StepLR(self.optimizer, step_size=self.config['train']['schedule'], gamma=0.1)
+        self.scheduler = lr_scheduler.CosineAnnealingLR(
+            self.optimizer,
+            T_max=self.config['train']['epoch'],
+            eta_min=1e-6
+        )
 
     def _prepare_dataloaders(self):
         is_distributed = self.accelerator.num_processes > 1
@@ -84,6 +88,7 @@ class BaseTrainer:
             num_workers=self.config['train']['num_workers'],
             shuffle=(train_sampler is None),
             pin_memory=True,
+            persistent_workers=True,
             drop_last=True
         )
         self.val_loader = DataLoader(
@@ -92,7 +97,7 @@ class BaseTrainer:
             sampler=val_sampler,
             num_workers=self.config['train']['num_workers'],
             shuffle=False,
-            pin_memory=False,
+            pin_memory=True,
             drop_last=True
         )
 

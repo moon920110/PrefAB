@@ -27,7 +27,8 @@ class RanknetTester:
     def inference(self):
         model = Prefab(self.config, self.meta_feature_size, self.bio_features_size)
         model_path = os.path.join(self.config['train']['save_dir'], self.config['experiment']['model'])
-        model.load_state_dict(torch.load(model_path))
+        with open(model_path, "rb") as f:
+            model.load_state_dict(torch.load(f))
         model.to(self.device)
         model.eval()
         self.logger.info(f'Model loaded from {model_path}')
@@ -53,7 +54,7 @@ class RanknetTester:
                     features = torch.stack(features).to(self.device)
                     bios = torch.stack(bios).to(self.device)
 
-                    o, _, _, _ = model(imgs, features, bios, test=True)
+                    o, _, _ = model(imgs, features, bios, test=True)
                     o = o.cpu().detach().numpy()
                     outputs.extend(o)
 
@@ -126,7 +127,7 @@ class RanknetTester:
                         features = torch.stack(features).to(self.device)
                         bios = torch.stack(bios).to(self.device)
 
-                        o, _, _, z = model(imgs, features, bios, test=True)
+                        o, _, z = model(imgs, features, bios, test=True)
                         o = o.cpu().detach().numpy()
                         outputs.extend(o)
 
