@@ -48,7 +48,11 @@ class BaseTrainer:
 
     def _setup_optimizer_and_scheduler(self):
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config['train']['lr'])
-        self.scheduler = lr_scheduler.StepLR(self.optimizer, step_size=self.config['train']['schedule'], gamma=0.1)
+        self.scheduler = lr_scheduler.CosineAnnealingLR(
+            self.optimizer,
+            T_max=self.config['train']['epoch'],
+            eta_min=1e-6
+        )
 
     def _prepare_dataloaders(self):
         is_distributed = self.accelerator.num_processes > 1

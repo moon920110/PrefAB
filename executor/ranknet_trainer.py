@@ -96,9 +96,9 @@ class RanknetTrainer(BaseTrainer):
                 train_aux_preds2.append(a_o2.detach().cpu())
 
                 if writer:
-                    writer.add_scalar(f'train/ranknet_loss', ranknet_loss.item(), epc * self.len_train_loader + i)
-                    writer.add_scalar(f'train/aux_loss', aux_loss.item(), epc * self.len_train_loader + i)
-                    writer.add_scalar(f'train/loss', loss.item(), epc * self.len_train_loader + i)
+                    writer.add_scalar(f'Train/ranknet_loss', ranknet_loss.item(), epc * self.len_train_loader + i)
+                    writer.add_scalar(f'Train/aux_loss', aux_loss.item(), epc * self.len_train_loader + i)
+                    writer.add_scalar(f'Train/loss', loss.item(), epc * self.len_train_loader + i)
                 losses += loss.item()
 
             self.scheduler.step()

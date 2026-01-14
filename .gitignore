@@ -5,5 +5,5 @@ venv/
 .run/
 __pycache__/
 .env
-config/config.yaml
 config/*.json
+config/*.yaml

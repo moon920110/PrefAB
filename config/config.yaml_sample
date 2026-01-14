@@ -1,11 +1,12 @@
 description: |
-  Separate the train set and test set explicitly
+  PREFAB+ baseline; CUDA 12.x
+  Generalization baseline
 
 data:
   path: /home/jovyan/data/AGAIN
   vision:
-    video: video
-    frame: frame_data
+    video: videos_mp4
+    frame: all_frame_data.h5
   img_mean: [ 0.485, 0.456, 0.406 ]
   img_std: [ 0.229, 0.224, 0.225 ]
   transform_size: [320, 480]
@@ -23,59 +24,59 @@ game_name:
 
 experiment:
   activate: true
-  player: p1
-  session: p1s1
+  player: p4
+  session: s2
   game: TopDown
   dataset_name: Shooter
   model: ranknet_prefab_v2_topdown_best.pth
 
 train:
-  exp: prefab_v2_topdown_custom
+  exp: PREFAB_gen_shooter_heist
   log_dir: log/
   save_dir: log/model
   mode: prefab  # prefab: full; image: only image; feature: only feature; non_ordinal: non_ordinal
   label: pair_rank_label  # cluster, arousal, pair_rank_label
   aux_label: cluster
-  domain: game  # genre, game
+  domain: genre  # genre, game
   genre: Shooter  # All, Shooter, Platformer, Racing
-  game: TopDown
-  lr: 0.0001
+  game: Endless
+  lr: 0.00005
   focal_alpha: 1
   focal_gamma: 5
   epoch: 60
   num_transform_layers: 6
-  batch_size: 20  # A100 (40G): 24, V100 (32G): 16
-  train_ratio: 1
+  batch_size: 48  # A100 (40G): 64 (for bf16), V100 (32G): 16
+  train_ratio: 0.8
   window_size: 12
   window_stride: 4
   ae_loss_weight: 0.001
   aux_loss_weight: 0.01
   dropout: 0.2  # 0.5 is trash
-  num_workers: 16
+  num_workers: 8
   bio_embedding_dim: 4
   d_model: 200
   schedule: 20
   data_balancing: true
   cutpoints: [-1, 1]
   seed: 1125
-  fine_tune: true
-  distributed:
-    multi_gpu: true
-    num_gpus: 4
-    world_size: 1
-    rank: 0
-    dist_url: tcp://localhost:11111
-    backend: nccl
+  fine_tune: false
+  ablation:
+      film: false
+      aux: false
+  generalization:
+      activate: true  # if activated, PREFAB will use all features
+      train_games: ['Heist!']  # the rests will be the test set
+  mixed_precision: "bf16" # no, fp16, bf16
 
 test:
   label: arousal  # cluster, arousal, pair_rank_label
   aux_label: cluster
-  exp: regression_test
-  log_dir: log/test/
+  exp: prefab_v2_topdown_nobioaux
+  log_dir: log/test/comparison
   save_dir: log/model
-  sample_size: 25
+  sample_size: -1
   mode: prefab
-  batch_size: 16
+  batch_size: 80
   seed: 1125
   cutpoints: [-1, 1]
 
@@ -99,12 +100,15 @@ debug:
 
 game_numbering:
   All:
+    # Racing
     TinyCars: 0
     Solid: 1
     ApexSpeed: 2
+    # Shooter
     Heist!: 3
     Shootout: 4
     TopDown: 5
+    # Platformer
     Run'N'Gun: 6
     Pirates!: 7
     Endless: 8
