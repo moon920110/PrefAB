@@ -4,6 +4,8 @@ data/
 venv/
 .run/
 __pycache__/
+peak/
 .env
 config/*.json
 config/*.yaml
+*.ipynb
