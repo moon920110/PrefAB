@@ -74,7 +74,10 @@ class AgainReader:
             again = self.game_info_by_name(scope)
             again['game_idx'] = 0
         elif domain == 'genre':
-            again = self.game_info_by_genre(scope)
+            if scope != "all":
+                again = self.game_info_by_genre(scope)
+            else:
+                again = self.again
             games = again['game'].unique()
             for game in games:
                 again.loc[again['game'] == game, 'game_idx'] = self.config['game_numbering'][scope][game] / self.config['game_numbering']['game_cnt_per_genre']

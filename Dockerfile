@@ -37,7 +37,9 @@ RUN pip install \
     networkx \
     psutil \
     wandb \
-    tensorboard
+    tensorboard \
+    dtw-python \
+    tslearn
 
 RUN pip install -U \
     transformers \
