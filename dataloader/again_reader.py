@@ -74,7 +74,7 @@ class AgainReader:
             again = self.game_info_by_name(scope)
             again['game_idx'] = 0
         elif domain == 'genre':
-            if scope != "all":
+            if scope != "All":
                 again = self.game_info_by_genre(scope)
             else:
                 again = self.again
