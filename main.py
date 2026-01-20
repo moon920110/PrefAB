@@ -5,7 +5,7 @@ import yaml
 
 import torch
 
-from accelerate import Accelerator
+from accelerate import Accelerator, DistributedDataParallelKwargs
 from accelerate.utils import set_seed
 from accelerate.logging import get_logger
 
@@ -32,11 +32,10 @@ def load_dataset(config, logger):
         train_samples = all_dataset_np[train_mask].tolist()
         test_samples = all_dataset_np[~train_mask].tolist()
 
-        if len(test_samples) < 0:
+        if len(test_samples) == 0:
             train_size = int(len(all_dataset) * config['train']['train_ratio'])
             test_size = len(all_dataset) - train_size
             train_samples, test_samples = torch.utils.data.random_split(all_dataset, [train_size, test_size])
-            # 모든 데이터셋이 트레이닝이면 트레이닝에서 테스트 나눌 것
             pass
 
         logger.info(f"Train Games: {list(set(games_arr[train_mask]))}")
@@ -62,8 +61,10 @@ if __name__ == '__main__':
     with open(args.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
+    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
     accelerator = Accelerator(
-        mixed_precision=config['train']['mixed_precision']
+        mixed_precision=config['train']['mixed_precision'],
+        kwargs_handlers=[ddp_kwargs]
     )
 
     logging.basicConfig(
