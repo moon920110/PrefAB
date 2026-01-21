@@ -5,7 +5,7 @@ import yaml
 
 import torch
 
-from accelerate import Accelerator, DistributedDataParallelKwargs
+from accelerate import Accelerator
 from accelerate.utils import set_seed
 from accelerate.logging import get_logger
 
@@ -61,10 +61,8 @@ if __name__ == '__main__':
     with open(args.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
-    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
     accelerator = Accelerator(
         mixed_precision=config['train']['mixed_precision'],
-        kwargs_handlers=[ddp_kwargs]
     )
 
     logging.basicConfig(
