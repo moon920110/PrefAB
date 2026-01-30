@@ -23,7 +23,7 @@ Analyze both video segments utilizing the **Game Context** provided above.
 Explain **WHY** these specific appraisals (A or B) were assigned. 
 
 For each of the 6 appraisal dimensions, provide:
-1. **Rationale**: A direct comparison referencing specific visual cues, game mechanics, and player actions (e.g., "In Video A, the player crashed into a wall (Novelty), whereas Video B showed routine driving").
+1. **Rationale**: A direct comparison referencing specific visual cues, game mechanics, and player actions.
 2. **Description**: A general summary of the event related to that dimension.
 """.strip()
 
@@ -31,7 +31,8 @@ TASK_INSTRUCTION_UNLABELED = """
 # Comparative Video Analysis for Emotional Appraisals
 
 You are an expert game analyst specializing in emotional appraisal theory.
-You are provided with two 3-second video clips (Video A and Video B) from a game session and the Game Information.
+You are provided with two 3-second video clips from a game session: **Video A** and **Video B**.
+You are also provided with the **Context** of the specific game being played (Rules, Controls, Objects).
 
 ## Task
 Compare the two clips across 6 emotional appraisal dimensions. 
@@ -39,7 +40,7 @@ Compare the two clips across 6 emotional appraisal dimensions.
 For **EACH** dimension, strictly follow this **Step-by-Step** reasoning process:
 1. **Analyze (Description)**: First, objectively describe what specific events happen in A and B related to this dimension.
 2. **Reason (Rationale)**: Compare the two based on the visual evidence. Explain logically which one is more intense.
-3. **Predict (Winner)**: Finally, determine the winner. Output **"A"** or **"B"**.
+3. **Predict (Winner)**: Finally, determine the winner. Output **A** or **B**.
 
 ## Appraisal Dimensions
 - **Novelty**: New, unexpected, or sudden events.
