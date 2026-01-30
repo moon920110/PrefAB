@@ -146,6 +146,7 @@ class RanknetTrainer(BaseTrainer):
 
         self.accelerator.wait_for_everyone()
         # if self.accelerator.is_main_process:
+        torch.cuda.empty_cache()
         self.tester.test(writer, self.save_path, self.accelerator)
 
         if writer:

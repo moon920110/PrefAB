@@ -5,6 +5,7 @@ import numpy as np
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from scipy.stats import kendalltau, ttest_1samp
+from accelerate.utils import gather_object
 
 from network.prefab import Prefab
 from utils.utils import normalize
@@ -178,22 +179,18 @@ class RanknetTester:
                     'labels': labels
                 })
 
-        all_viz_results = [None] * accelerator.num_processes if accelerator else [local_results_for_vis]
         if accelerator and accelerator.num_processes > 1:
-            accelerator.gather_object(local_results_for_vis, all_viz_results)
-            all_viz_results = [item for sublist in all_viz_results for item in sublist]
+            all_viz_results = gather_object(local_results_for_vis)
         else:
             all_viz_results = local_results_for_vis
 
         all_taus = accelerator.gather_for_metrics(torch.tensor(local_taus).to(self.device)).cpu().numpy().tolist()
-        sig_cnt = accelerator.gather_for_metrics(torch.tensor(local_sig_cnt).to(self.device)).sum().item()
-        embeddings = accelerator.gather_for_metrics(torch.tensor(np.vstack(local_embeddings)).to(self.device)).cpu().numpy()
-        metadata = [None] * accelerator.num_processes
-        accelerator.gather_object(local_metadata, metadata)
-        metadata = [item for sublist in metadata for item in sublist]
+        sig_cnt = accelerator.gather_for_metrics(torch.tensor([local_sig_cnt]).to(self.device)).sum().item()
+        embeddings = np.vstack(gather_object(local_embeddings))
+        metadata = gather_object(local_metadata)
 
         if is_main and test_writer:
-            for res in all_viz_results:
+            for res in tqdm(all_viz_results):
                 idx = res['pid']
                 for ii, (o, y) in enumerate(zip(res['outputs'], res['labels'])):
                     if test_writer:
@@ -228,5 +225,5 @@ class RanknetTester:
                 metadata_header=['Arousal', 'Cluster'],
             )
 
-        if writer is None:
+        if test_writer:
             test_writer.close()
