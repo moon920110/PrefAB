@@ -9,3 +9,5 @@ peak/
 config/*.json
 config/*.yaml
 *.ipynb
+/dataset
+/log
