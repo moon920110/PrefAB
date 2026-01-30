@@ -238,7 +238,10 @@ class TestDataset(Dataset):
 
     def __del__(self):
         if self.h5_file is not None:
-            self.h5_file.close()
+            try:
+                self.h5_file.close()
+            except (TypeError, AttributeError):
+                pass
 
 
 class BioDataset(Dataset):
