@@ -6,7 +6,7 @@ import yaml
 import torch
 
 from accelerate import Accelerator
-from accelerate.utils import set_seed
+from accelerate.utils import set_seed, broadcast_object_list
 from accelerate.logging import get_logger
 
 from dataloader.dataset import PairDataset, TestDataset
@@ -72,18 +72,24 @@ if __name__ == '__main__':
     )
     logger.info(accelerator.state, main_process_only=False)
 
-    config['train']['exp'] = create_new_filename(config['train']['log_dir'], config['train']['exp'])
+    # config['train']['exp'] = create_new_filename(config['train']['log_dir'], config['train']['exp'])
+    exp_name = [config['train']['exp']]
     if accelerator.is_main_process:
+        new_filename = create_new_filename(config['train']['log_dir'], config['train']['exp'])
+        exp_name = [new_filename]
+
         if not os.path.exists(config['train']['log_dir']):
             os.makedirs(config['train']['log_dir'], exist_ok=True)
 
-        if not os.path.exists(os.path.join(config['train']['log_dir'], f"{config['train']['exp']}")):
-            os.makedirs(os.path.join(config['train']['log_dir'], f"{config['train']['exp']}"), exist_ok=True)
+        if not os.path.exists(os.path.join(config['train']['log_dir'], f"{new_filename}")):
+            os.makedirs(os.path.join(config['train']['log_dir'], f"{new_filename}"), exist_ok=True)
 
-        fh = logging.FileHandler(os.path.join(config['train']['log_dir'], f"{config['train']['exp']}", 'log.log'))
+        fh = logging.FileHandler(os.path.join(config['train']['log_dir'], f"{new_filename}", 'log.log'))
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         fh.setFormatter(formatter)
         logger.logger.addHandler(fh)
+    broadcast_object_list(exp_name, from_process=0)
+    config['train']['exp'] = exp_name[0]
 
     set_seed(config['train']['seed'])
 
