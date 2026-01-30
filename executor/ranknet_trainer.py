@@ -145,8 +145,8 @@ class RanknetTrainer(BaseTrainer):
             best_acc = self._save_model(acc, best_acc)
 
         self.accelerator.wait_for_everyone()
-        if self.accelerator.is_main_process:
-            self.tester.test(writer, self.save_path)
+        # if self.accelerator.is_main_process:
+        self.tester.test(writer, self.save_path, self.accelerator)
 
         if writer:
             writer.close()
