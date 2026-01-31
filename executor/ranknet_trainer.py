@@ -32,20 +32,17 @@ class RanknetTrainer(BaseTrainer):
         (
             self.model,
             self.optimizer,
-            self.train_loader,
-            self.val_loader,
             self.scheduler
         ) = self.accelerator.prepare(
             self.model,
             self.optimizer,
-            self.train_loader,
-            self.val_loader,
             self.scheduler
         )
         self.len_train_loader = len(self.train_loader)
         self.len_val_loader = len(self.val_loader)
 
     def train(self):
+        device = self.accelerator.device
         writer = self._setup_writer()
 
         self.logger.info(f'build model on device: {self.accelerator.device}')
@@ -64,6 +61,9 @@ class RanknetTrainer(BaseTrainer):
 
             iterator = self._set_epoch(epc)
             for i, (img1, feature1, img2, feature2, bio, label, aux_label) in iterator:
+                img1, feature1, img2, feature2, bio, label, aux_label = (
+                    img1.to(device), feature1.to(device), img2.to(device), feature2.to(device),
+                    bio.to(device), label.to(device), aux_label.to(device))
                 l0_cnt += len(label[label == 0])
                 l1_cnt += len(label[label == 1])
                 l2_cnt += len(label[label == 2])
@@ -123,6 +123,9 @@ class RanknetTrainer(BaseTrainer):
                     total=self.len_val_loader
                 )
                 for i, (img1, feature1, img2, feature2, bio, label, aux_label) in iterator:
+                    img1, feature1, img2, feature2, bio, label, aux_label = (
+                        img1.to(device), feature1.to(device), img2.to(device), feature2.to(device),
+                        bio.to(device), label.to(device), aux_label.to(device))
                     img_cat = torch.cat([img1, img2], dim=0)
                     feature_cat = torch.cat([feature1, feature2], dim=0)
                     bio_cat = torch.cat([bio, bio], dim=0)
