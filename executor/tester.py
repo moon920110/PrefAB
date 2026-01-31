@@ -184,8 +184,8 @@ class RanknetTester:
         else:
             all_viz_results = local_results_for_vis
 
-        all_taus = accelerator.gather_for_metrics(torch.tensor(local_taus).to(self.device)).cpu().numpy().tolist()
-        sig_cnt = accelerator.gather_for_metrics(torch.tensor([local_sig_cnt]).to(self.device)).sum().item()
+        all_taus = gather_object(local_taus)
+        sig_cnt = np.sum(gather_object([local_sig_cnt]))
         embeddings = np.vstack(gather_object(local_embeddings))
         metadata = gather_object(local_metadata)
 
